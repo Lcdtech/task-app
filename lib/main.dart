@@ -1,125 +1,287 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  await Hive.initFlutter();
+  var box = await Hive.openBox('tasks');
+
+  // Dummy data
+  box.put('Most Urgent', ['Pay electricity bill', 'Respond to client email']);
+  box.put('Important', ['Prepare presentation', 'Weekly team sync']);
+  box.put('Do this Later', ['Organize bookshelf', 'Buy new pens']);
+  box.put('Kind of Important', ['Update LinkedIn profile', 'Review budget sheet']);
+  box.put('Complete', ['Submit tax forms', 'Renew gym membership']);
+
+  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: TodoHomePage()));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TodoHomePage extends StatefulWidget {
+  const TodoHomePage({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+  State<TodoHomePage> createState() => _TodoHomePageState();
+}
+
+class _TodoHomePageState extends State<TodoHomePage> {
+  final Map<String, bool> _expanded = {
+    'Most Urgent': true,
+    'Important': false,
+    'Do this Later': false,
+    'Kind of Important': false,
+    'Complete': false,
+  };
+
+  final Box taskBox = Hive.box('tasks');
+
+  List<String> getTasks(String category) {
+    return (taskBox.get(category) as List?)?.cast<String>() ?? [];
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
+  void toggleExpand(String title) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _expanded[title] = !(_expanded[title] ?? false);
+    });
+  }
+
+  void expandAll() {
+    setState(() {
+      for (var key in _expanded.keys) {
+        _expanded[key] = true;
+      }
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: Colors.white,
+    body: SafeArea(
+      child: Column(
+        children: [
+          const _Header(),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                ..._expanded.keys.map((title) => TodoGroup(
+                      title: title,
+                      color: _getColor(title),
+                      items: getTasks(title),
+                      showItems: _expanded[title] ?? true,
+                      trailingCount: getTasks(title).length,
+                      onToggle: () => toggleExpand(title),
+                    )),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+
+          // FiltersBar fixed above the AddTask button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _FiltersBar(onExpandAll: expandAll),
+          ),
+
+          const SizedBox(height: 16),
+
+          const _AddTaskButton(),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+    ),
+  );
+}
+
+  Color _getColor(String title) {
+    switch (title) {
+      case 'Most Urgent':
+        return const Color(0xFFFF7043);
+      case 'Important':
+        return const Color(0xFF5C6BC0);
+      case 'Do this Later':
+        return const Color(0xFF64B5F6);
+      case 'Kind of Important':
+        return const Color(0xFFBA68C8);
+      case 'Complete':
+        return const Color(0xFF2E7D32);
+      default:
+        return Colors.grey;
+    }
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('👋 Good', style: GoogleFonts.montserrat(fontSize: 28, fontWeight: FontWeight.w600)),
+              Text('Morning', style: GoogleFonts.montserrat(fontSize: 28, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.settings_outlined), onPressed: () {}),
+        ],
+      ),
+    );
+  }
+}
+
+class TodoGroup extends StatelessWidget {
+  final String title;
+  final Color color;
+  final List<String> items;
+  final int? trailingCount;
+  final bool showItems;
+  final VoidCallback? onToggle;
+
+  const TodoGroup({
+    Key? key,
+    required this.title,
+    required this.color,
+    required this.items,
+    this.trailingCount,
+    this.showItems = true,
+    this.onToggle,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final count = trailingCount ?? items.length;
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      margin: const EdgeInsets.only(bottom: 0),
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            onTap: onToggle,
+            title: Text(title, style: GoogleFonts.montserrat(color: Colors.white, fontWeight: FontWeight.w600)),
+            trailing: CircleAvatar(
+              radius: 12,
+              backgroundColor: Colors.white,
+              child: Text('$count', style: GoogleFonts.montserrat(color: color.darken(), fontSize: 12, fontWeight: FontWeight.w600)),
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
+          ),
+          if (showItems)
+            ...items.map((task) => _TodoItem(text: task)).toList(),
+        ],
+      ),
+    );
+  }
+}
+
+class _TodoItem extends StatelessWidget {
+  final String text;
+  const _TodoItem({Key? key, required this.text}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          leading: Checkbox(
+            value: false,
+            onChanged: (_) {},
+            side: const BorderSide(color: Colors.white, width: 1.6),
+            checkColor: Colors.white,
+            activeColor: Colors.white,
+          ),
+          title: Text(text, style: GoogleFonts.montserrat(color: Colors.white, fontSize: 12)),
+        ),
+      ),
+    );
+  }
+}
+
+class _FiltersBar extends StatelessWidget {
+  final VoidCallback? onExpandAll;
+  const _FiltersBar({Key? key, this.onExpandAll}) : super(key: key);
+
+  Widget _buildChip(IconData icon, String label, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16),
+            const SizedBox(width: 4),
+            Text(label, style: GoogleFonts.montserrat(fontSize: 12)),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _buildChip(Icons.color_lens_outlined, 'Color'),
+        const SizedBox(width: 8),
+        _buildChip(Icons.date_range_outlined, 'Due Date'),
+        const Spacer(),
+        _buildChip(Icons.unfold_more, 'Expand All', onTap: onExpandAll),
+      ],
+    );
+  }
+}
+
+class _AddTaskButton extends StatelessWidget {
+  const _AddTaskButton({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.black,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+          ),
+          onPressed: () {},
+          icon: const Icon(Icons.add, color: Colors.white),
+          label: Text('Add Task', style: GoogleFonts.montserrat(color: Colors.white)),
+        ),
+      ),
+    );
+  }
+}
+
+extension ColorBrightness on Color {
+  Color darken([double amount = .1]) {
+    assert(amount >= 0 && amount <= 1);
+    final hsl = HSLColor.fromColor(this);
+    final hslDark = hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0));
+    return hslDark.toColor();
   }
 }
