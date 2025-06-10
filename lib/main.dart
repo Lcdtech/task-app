@@ -1,18 +1,58 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'styles.dart';
+import 'setting.dart';
+import '../models/section.dart';
+import 'package:uuid/uuid.dart';
+import 'add_task_page.dart';
+import 'package:intl/intl.dart';
 
 void main() async {
   await Hive.initFlutter();
-  var box = await Hive.openBox('tasks');
 
-  // Dummy data
-  box.put('Most Urgent', ['Pay electricity bill', 'Respond to client email']);
-  box.put('Important', ['Prepare presentation', 'Weekly team sync']);
-  box.put('Do this Later', ['Organize bookshelf', 'Buy new pens']);
-  box.put('Kind of Important', ['Update LinkedIn profile', 'Review budget sheet']);
-  box.put('Complete', ['Submit tax forms', 'Renew gym membership']);
+  var sectionBox = await Hive.openBox('sections');
+  if (sectionBox.isEmpty) {
+
+   const uuid = Uuid();
+  await sectionBox.put('list', [
+    {
+      'id': uuid.v4(),
+      'name': 'Most Urgent',
+      'color': Colors.red.value,
+      'isFixed': false,
+      'tasks': <Map<String, dynamic>>[], // empty list of maps
+    },
+    {
+      'id': uuid.v4(),
+      'name': 'Important',
+      'color': Colors.orange.value,
+      'isFixed': false,
+      'tasks': [],
+    },
+    {
+      'id': uuid.v4(),
+      'name': 'Do this Later',
+      'color': Colors.blue.value,
+      'isFixed': false,
+      'tasks': [],
+    },
+    {
+      'id': uuid.v4(),
+      'name': 'Kind of Important',
+      'color': Colors.purple.value,
+      'isFixed': false,
+      'tasks': [],
+    },
+    {
+      'id': uuid.v4(),
+      'name': 'Complete',
+      'color': Colors.green.value,
+      'isFixed': true,
+      'tasks': [],
+    },
+  ]);
+  }
 
   runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: TodoHomePage()));
 }
@@ -25,19 +65,53 @@ class TodoHomePage extends StatefulWidget {
 }
 
 class _TodoHomePageState extends State<TodoHomePage> {
-  final Map<String, bool> _expanded = {
-    'Most Urgent': true,
-    'Important': false,
-    'Do this Later': false,
-    'Kind of Important': false,
-    'Complete': false,
-  };
+  final Box sectionBox = Hive.box('sections');
+  final Map<String, bool> _expanded = {};
+  bool _allExpanded = false;
 
-  final Box taskBox = Hive.box('tasks');
+ List<Section> getAllSections() {
+  final rawList = sectionBox.get('list');
+  if (rawList == null || rawList is! List) return [];
 
-  List<String> getTasks(String category) {
-    return (taskBox.get(category) as List?)?.cast<String>() ?? [];
-  }
+  final sections = rawList.whereType<Map>().map((e) {
+    final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
+    return Section(
+      id: map['id'] ?? const Uuid().v4(),
+      name: map['name'] ?? '',
+      color: Color(map['color'] ?? Colors.grey.value),
+      isFixed: map['isFixed'] ?? false,
+      tasks: List<Map<String, dynamic>>.from(
+        (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
+      ),
+    );
+  }).toList();
+
+  return sections;
+}
+
+
+
+
+
+  List<Map<String, dynamic>> getTasks(String category) {
+  final List sectionData = sectionBox.get('list', defaultValue: []);
+  final sections = sectionData.map((e) {
+    final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
+    return Section(
+      id: map['id'],
+      name: map['name'],
+      color: Color(map['color']),
+      isFixed: map['isFixed'],
+      tasks: List<Map<String, dynamic>>.from(
+        (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
+      ),
+    );
+  }).toList();
+
+  final section = sections.firstWhere((s) => s.name == category);
+  return section.tasks;
+}
+
 
   void toggleExpand(String title) {
     setState(() {
@@ -47,90 +121,107 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   void expandAll() {
     setState(() {
+      _allExpanded = !_allExpanded;
       for (var key in _expanded.keys) {
-        _expanded[key] = true;
+        _expanded[key] = _allExpanded;
       }
     });
   }
 
-  @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    backgroundColor: Colors.white,
-    body: SafeArea(
-      child: Column(
-        children: [
-          const _Header(),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                ..._expanded.keys.map((title) => TodoGroup(
-                      title: title,
-                      color: _getColor(title),
-                      items: getTasks(title),
-                      showItems: _expanded[title] ?? true,
-                      trailingCount: getTasks(title).length,
-                      onToggle: () => toggleExpand(title),
-                    )),
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
+  void _navigateToAddTask() async {
+    List sectionData = sectionBox.get('list', defaultValue: []);
+    List<Section> sections = sectionData.map((e) {
+      final map = Map<String, dynamic>.from(e);
+      return Section(
+        id: map['id'],
+        name: map['name'],
+        color: Color(map['color']),
+        isFixed: map['isFixed'],
+        tasks: List<Map<String, dynamic>>.from(map['tasks']),
+      );
+    }).toList();
 
-          // FiltersBar fixed above the AddTask button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _FiltersBar(onExpandAll: expandAll),
-          ),
-
-          const SizedBox(height: 16),
-
-          const _AddTaskButton(),
-        ],
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddTaskPage(
+          sectionNames: sections.map((s) => s.name).toList(),
+        ),
       ),
-    ),
-  );
-}
+    );
 
-  Color _getColor(String title) {
-    switch (title) {
-      case 'Most Urgent':
-        return const Color(0xFFFF7043);
-      case 'Important':
-        return const Color(0xFF5C6BC0);
-      case 'Do this Later':
-        return const Color(0xFF64B5F6);
-      case 'Kind of Important':
-        return const Color(0xFFBA68C8);
-      case 'Complete':
-        return const Color(0xFF2E7D32);
-      default:
-        return Colors.grey;
+    if (result != null && result is Map<String, dynamic>) {
+      final selectedSection = result['section'];
+      final newTask = result['task'];
+      final dueDate = result['dueDate']; // optional
+
+      final index = sections.indexWhere((s) => s.name == selectedSection);
+      if (index != -1) {
+        sections[index].tasks.add({
+          'text': newTask,
+          'dueDate': dueDate,
+        });
+        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+        setState(() {});
+      }
     }
   }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('👋 Good', style: GoogleFonts.montserrat(fontSize: 28, fontWeight: FontWeight.w600)),
-              Text('Morning', style: GoogleFonts.montserrat(fontSize: 28, fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const Spacer(),
-          IconButton(icon: const Icon(Icons.settings_outlined), onPressed: () {}),
-        ],
+    final sections = getAllSections();
+    final List<Widget> groups = [
+      for (int i = 0; i < sections.length; i++)
+        TodoGroup(
+          title: sections[i].name,
+          color: sections[i].color,
+          items: getTasks(sections[i].name),
+          showItems: _expanded[sections[i].name] ?? true,
+          trailingCount: getTasks(sections[i].name).length,
+          onToggle: () => toggleExpand(sections[i].name),
+          isLast: i == sections.length - 1,
+        ),
+    ];
+
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: SafeArea(
+        child: Column(
+          children: [
+            const _Header(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: OverlappingTaskList(taskGroups: groups),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+              child: _FiltersBar(onExpandAll: expandAll, allExpanded: _allExpanded),
+            ),
+            const SizedBox(height: 16),
+            _AddTaskButton(onPressed: _navigateToAddTask),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class OverlappingTaskList extends StatelessWidget {
+  final List<Widget> taskGroups;
+  const OverlappingTaskList({Key? key, required this.taskGroups}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (int i = 0; i < taskGroups.length; i++)
+          Transform.translate(
+            offset: Offset(0, -25 * i.toDouble()),
+            child: taskGroups[i],
+          ),
+      ],
     );
   }
 }
@@ -138,10 +229,11 @@ class _Header extends StatelessWidget {
 class TodoGroup extends StatelessWidget {
   final String title;
   final Color color;
-  final List<String> items;
+  final List<Map<String, dynamic>> items;
   final int? trailingCount;
   final bool showItems;
   final VoidCallback? onToggle;
+  final bool isLast;
 
   const TodoGroup({
     Key? key,
@@ -151,33 +243,42 @@ class TodoGroup extends StatelessWidget {
     this.trailingCount,
     this.showItems = true,
     this.onToggle,
+    this.isLast = false,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final count = trailingCount ?? items.length;
-    return Container(
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-      ),
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 0),
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      padding: const EdgeInsets.only(top: 8, bottom: 0),
+      constraints: BoxConstraints(minHeight: showItems ? 0 : 60),
       child: Column(
         children: [
-          ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            onTap: onToggle,
-            title: Text(title, style: GoogleFonts.montserrat(color: Colors.white, fontWeight: FontWeight.w600)),
-            trailing: CircleAvatar(
-              radius: 12,
-              backgroundColor: Colors.white,
-              child: Text('$count', style: GoogleFonts.montserrat(color: color.darken(), fontSize: 12, fontWeight: FontWeight.w600)),
+          SizedBox(
+            height: isLast ? 59 : 71,
+            child: ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              onTap: onToggle,
+              title: Text(title, style: AppTextStyles.groupTitle),
+              trailing: Text('$count', style: AppTextStyles.groupTitle),
             ),
           ),
           if (showItems)
-            ...items.map((task) => _TodoItem(text: task)).toList(),
+            ...items.asMap().entries.map((entry) {
+              int index = entry.key;
+              Map<String, dynamic> task = entry.value;
+              Widget itemWidget = _TodoItem(text: task['text'] ?? '');
+
+              return Transform.translate(
+                offset: Offset(0, isLast ? -15 : -25),
+                child: itemWidget,
+              );
+            }).toList(),
         ],
       ),
     );
@@ -193,22 +294,56 @@ class _TodoItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
       child: Container(
+        height: 48,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: AppColors.white.withOpacity(0.15),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          leading: Checkbox(
-            value: false,
-            onChanged: (_) {},
-            side: const BorderSide(color: Colors.white, width: 1.6),
-            checkColor: Colors.white,
-            activeColor: Colors.white,
+        child: Center(
+          child: ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            leading: Checkbox(
+              value: false,
+              onChanged: (_) {},
+              side: const BorderSide(color: AppColors.white, width: 1.6),
+              checkColor: AppColors.white,
+              activeColor: AppColors.white,
+            ),
+            title: Text(text, style: AppTextStyles.taskItem),
           ),
-          title: Text(text, style: GoogleFonts.montserrat(color: Colors.white, fontSize: 12)),
         ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              '👋 Good Morning',
+              style: AppTextStyles.header,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SettingsPage()),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -216,23 +351,33 @@ class _TodoItem extends StatelessWidget {
 
 class _FiltersBar extends StatelessWidget {
   final VoidCallback? onExpandAll;
-  const _FiltersBar({Key? key, this.onExpandAll}) : super(key: key);
+  final bool allExpanded;
+  const _FiltersBar({Key? key, this.onExpandAll, this.allExpanded = false}) : super(key: key);
 
   Widget _buildChip(IconData icon, String label, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
       child: Container(
+        width: 108,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 16),
             const SizedBox(width: 4),
-            Text(label, style: GoogleFonts.montserrat(fontSize: 12)),
+            Flexible(
+              child: Text(
+                label,
+                style: AppTextStyles.chipText,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
           ],
         ),
       ),
@@ -247,14 +392,19 @@ class _FiltersBar extends StatelessWidget {
         const SizedBox(width: 8),
         _buildChip(Icons.date_range_outlined, 'Due Date'),
         const Spacer(),
-        _buildChip(Icons.unfold_more, 'Expand All', onTap: onExpandAll),
+        _buildChip(
+          Icons.unfold_more,
+          allExpanded ? 'Collapse All' : 'Expand All',
+          onTap: onExpandAll,
+        ),
       ],
     );
   }
 }
 
 class _AddTaskButton extends StatelessWidget {
-  const _AddTaskButton({Key? key}) : super(key: key);
+  final VoidCallback onPressed;
+  const _AddTaskButton({Key? key, required this.onPressed}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -265,23 +415,14 @@ class _AddTaskButton extends StatelessWidget {
         height: 52,
         child: ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.black,
+            backgroundColor: AppColors.black,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
           ),
-          onPressed: () {},
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: Text('Add Task', style: GoogleFonts.montserrat(color: Colors.white)),
+          onPressed: onPressed,
+          icon: const Icon(Icons.add, color: AppColors.white),
+          label: Text('Add Task', style: AppTextStyles.buttonText),
         ),
       ),
     );
-  }
-}
-
-extension ColorBrightness on Color {
-  Color darken([double amount = .1]) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(this);
-    final hslDark = hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0));
-    return hslDark.toColor();
   }
 }
