@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:uuid/uuid.dart'; // Add this line
+import 'package:uuid/uuid.dart';
 import 'styles.dart';
 import '../models/section.dart';
 import 'create_section_page.dart';
@@ -23,7 +23,8 @@ class _SettingsPageState extends State<SettingsPage> {
   static const double itemHeight = 50;
   static const double overlap = 2;
 
-  final uuid = Uuid(); // Unique ID generator
+  final uuid = Uuid();
+  int? draggingIndex;
 
   @override
   void initState() {
@@ -40,10 +41,9 @@ class _SettingsPageState extends State<SettingsPage> {
         .map((e) => Section.fromMap(Map<String, dynamic>.from(e)))
         .toList();
 
-    // Ensure "Complete" section exists
     if (sections.where((s) => s.isFixed).isEmpty) {
       sections.add(Section(
-        id: uuid.v4(), // Assign unique ID
+        id: uuid.v4(),
         name: 'Complete',
         color: AppColors.complete,
         isFixed: true,
@@ -59,38 +59,37 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _navigateToCreateSectionPage() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => CreateSectionPage(
-        onSectionCreated: (newSection) {
-          final exists = sections.any((s) =>
-              s.name.trim().toLowerCase() == newSection.name.trim().toLowerCase());
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateSectionPage(
+          onSectionCreated: (newSection) {
+            final exists = sections.any((s) =>
+                s.name.trim().toLowerCase() == newSection.name.trim().toLowerCase());
 
-          if (exists) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('A section with this name already exists.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            return;
-          }
+            if (exists) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('A section with this name already exists.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
 
-          setState(() {
-            sections.insert(sections.length - 1, newSection);
-            _saveSections();
-          });
-        },
+            setState(() {
+              sections.insert(sections.length - 1, newSection);
+              _saveSections();
+            });
+          },
+        ),
       ),
-    ),
-  );
-}
-
-
+    );
+  }
 
   void _onReorder(int oldIndex, int newIndex) {
     if (sections[oldIndex].isFixed) return;
+
     if (newIndex >= sections.length - 1) {
       newIndex = sections.length - 1;
     }
@@ -105,6 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _deleteSection(int index) {
     if (sections[index].isFixed) return;
+
     setState(() {
       sections.removeAt(index);
       _saveSections();
@@ -120,84 +120,75 @@ class _SettingsPageState extends State<SettingsPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: ReorderableListView.builder(
-                itemCount: sections.length,
-                onReorder: _onReorder,
-                buildDefaultDragHandles: false,
-                padding: const EdgeInsets.only(bottom: 100), // leave room for overlap
-                proxyDecorator: (child, index, animation) {
-                  return Material(
-                    color: Colors.transparent,
-                    child: Transform.translate(
-                      offset: Offset(0, 2),
-                      child: child,
-                    ),
-                  );
-                },
-                itemBuilder: (context, index) {
-                final section = sections[index];
-                final isDraggable = !section.isFixed;
-
-                return Transform.translate(
-                  key: ValueKey(section.id),
-                  offset: Offset(0, index * -25), // Keep your overlapping logic
+              child: SingleChildScrollView(
+                child: SizedBox(
+                  height: sections.length * 50 + 100,
                   child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Background tile
-                      Material(
-                        elevation: 4,
-                        borderRadius: BorderRadius.circular(20),
-                        color: section.color,
-                        child: Container(
-                          height: 60,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.only(left: 56, right: 16), // leave space for drag icon
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: ListTile(
-                              title: Text(
-                                section.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              trailing: section.isFixed || index == sections.length - 1
-                                  ? const SizedBox.shrink()
-                                  : IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.white),
-                                      onPressed: () => _deleteSection(index),
+                    children: List.generate(sections.length, (index) {
+                      final section = sections[index];
+                      final isDragging = index == draggingIndex;
+
+                      return AnimatedPositioned(
+                        key: ValueKey(section.id),
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        top: index * -25.0 + (index * 85),
+                        left: 0,
+                        right: 0,
+                        child: DragTarget<int>(
+                          onWillAccept: (fromIndex) =>
+                              fromIndex != null &&
+                              fromIndex != index &&
+                              !sections[index].isFixed,
+                          onAccept: (fromIndex) {
+                          if (sections[fromIndex].isFixed) return;
+
+                          final fixedIndex = sections.lastIndexWhere((s) => s.isFixed);
+                          var insertIndex = index;
+
+                          if (insertIndex >= fixedIndex) {
+                            insertIndex = fixedIndex - (fromIndex < fixedIndex ? 0 : 1);
+                          }
+
+                          setState(() {
+                            final moved = sections.removeAt(fromIndex);
+                            sections.insert(insertIndex, moved);
+                            draggingIndex = null;
+                            _saveSections();
+                          });
+                        },
+
+                          builder: (context, candidateData, rejectedData) {
+                            final tile = Opacity(
+                              opacity: isDragging ? 0.0 : 1.0,
+                              child: _buildTile(index, section),
+                            );
+
+                            return section.isFixed
+                                ? tile
+                                : LongPressDraggable<int>(
+                                    data: index,
+                                    onDragStarted: () => setState(() {
+                                      draggingIndex = index;
+                                    }),
+                                    onDragEnd: (_) => setState(() {
+                                      draggingIndex = null;
+                                    }),
+                                    feedback: Material(
+                                      color: Colors.transparent,
+                                      child: SizedBox(
+                                        width: MediaQuery.of(context).size.width - 32,
+                                        child: _buildTile(index, section),
+                                      ),
                                     ),
-                            ),
-                          ),
+                                    child: tile,
+                                  );
+                          },
                         ),
-                      ),
-
-                      // Floating drag/lock icon (z-index on top)
-                      Positioned(
-                        left: 12,
-                        top: 14,
-                        child: section.isFixed
-                            ? const Icon(Icons.lock, color: Colors.white)
-                            : ReorderableDragStartListener(
-                                index: index,
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black26,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  padding: const EdgeInsets.all(6),
-                                  child: const Icon(Icons.drag_indicator, color: Colors.white),
-                                ),
-                              ),
-                      ),
-                    ],
+                      );
+                    }),
                   ),
-                );
-              }
-
+                ),
               ),
             ),
           ),
@@ -207,21 +198,57 @@ class _SettingsPageState extends State<SettingsPage> {
               width: double.infinity,
               height: 52,
               child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.black, width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(32),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.black, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(32),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                onPressed: _navigateToCreateSectionPage,
+                icon: const Icon(Icons.add, color: Colors.black),
+                label: const Text(
+                  'Create Section',
+                  style: TextStyle(color: Colors.black),
+                ),
               ),
-              onPressed: _navigateToCreateSectionPage,
-              icon: const Icon(Icons.add, color: Colors.black),
-              label: const Text('Create Section', style: TextStyle(color: Colors.black)),
-            ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTile(int index, Section section) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(20),
+          color: section.color,
+          child: Container(
+            height: section.isFixed ? 59 : 71,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ListTile(
+                title: Text(section.name, style: AppTextStyles.groupTitle),
+                trailing: section.isFixed
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.white),
+                        onPressed: () => _deleteSection(index),
+                      ),
+                leading: section.isFixed
+                    ? const Icon(Icons.lock, color: Colors.white)
+                    : const Icon(Icons.drag_indicator, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
