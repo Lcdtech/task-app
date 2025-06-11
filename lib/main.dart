@@ -1,60 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
+
 import 'styles.dart';
 import 'setting.dart';
-import '../models/section.dart';
-import 'package:uuid/uuid.dart';
 import 'add_task_page.dart';
-import 'package:intl/intl.dart';
+import '../models/section.dart';
 
 void main() async {
   await Hive.initFlutter();
 
   var sectionBox = await Hive.openBox('sections');
   if (sectionBox.isEmpty) {
-
-   const uuid = Uuid();
-  await sectionBox.put('list', [
-    {
-      'id': uuid.v4(),
-      'name': 'Most Urgent',
-      'color': Colors.red.value,
-      'isFixed': false,
-      'tasks': <Map<String, dynamic>>[], // empty list of maps
-    },
-    {
-      'id': uuid.v4(),
-      'name': 'Important',
-      'color': Colors.orange.value,
-      'isFixed': false,
-      'tasks': [],
-    },
-    {
-      'id': uuid.v4(),
-      'name': 'Do this Later',
-      'color': Colors.blue.value,
-      'isFixed': false,
-      'tasks': [],
-    },
-    {
-      'id': uuid.v4(),
-      'name': 'Kind of Important',
-      'color': Colors.purple.value,
-      'isFixed': false,
-      'tasks': [],
-    },
-    {
-      'id': uuid.v4(),
-      'name': 'Complete',
-      'color': Colors.green.value,
-      'isFixed': true,
-      'tasks': [],
-    },
-  ]);
+    const uuid = Uuid();
+    await sectionBox.put('list', [
+      {
+        'id': uuid.v4(),
+        'name': 'Most Urgent',
+        'color': Colors.red.value,
+        'isFixed': false,
+        'tasks': <Map<String, dynamic>>[],
+      },
+      {
+        'id': uuid.v4(),
+        'name': 'Important',
+        'color': Colors.orange.value,
+        'isFixed': false,
+        'tasks': [],
+      },
+      {
+        'id': uuid.v4(),
+        'name': 'Do this Later',
+        'color': Colors.blue.value,
+        'isFixed': false,
+        'tasks': [],
+      },
+      {
+        'id': uuid.v4(),
+        'name': 'Kind of Important',
+        'color': Colors.purple.value,
+        'isFixed': false,
+        'tasks': [],
+      },
+      {
+        'id': uuid.v4(),
+        'name': 'Complete',
+        'color': Colors.green.value,
+        'isFixed': true,
+        'tasks': [],
+      },
+    ]);
   }
 
-  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: TodoHomePage()));
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: TodoHomePage(),
+  ));
 }
 
 class TodoHomePage extends StatefulWidget {
@@ -69,49 +72,41 @@ class _TodoHomePageState extends State<TodoHomePage> {
   final Map<String, bool> _expanded = {};
   bool _allExpanded = false;
 
- List<Section> getAllSections() {
-  final rawList = sectionBox.get('list');
-  if (rawList == null || rawList is! List) return [];
+  List<Section> getAllSections() {
+    final rawList = sectionBox.get('list');
+    if (rawList == null || rawList is! List) return [];
 
-  final sections = rawList.whereType<Map>().map((e) {
-    final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
-    return Section(
-      id: map['id'] ?? const Uuid().v4(),
-      name: map['name'] ?? '',
-      color: Color(map['color'] ?? Colors.grey.value),
-      isFixed: map['isFixed'] ?? false,
-      tasks: List<Map<String, dynamic>>.from(
-        (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
-      ),
-    );
-  }).toList();
-
-  return sections;
-}
-
-
-
-
+    return rawList.whereType<Map>().map((e) {
+      final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
+      return Section(
+        id: map['id'] ?? const Uuid().v4(),
+        name: map['name'] ?? '',
+        color: Color(map['color'] ?? Colors.grey.value),
+        isFixed: map['isFixed'] ?? false,
+        tasks: List<Map<String, dynamic>>.from(
+          (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
+        ),
+      );
+    }).toList();
+  }
 
   List<Map<String, dynamic>> getTasks(String category) {
-  final List sectionData = sectionBox.get('list', defaultValue: []);
-  final sections = sectionData.map((e) {
-    final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
-    return Section(
-      id: map['id'],
-      name: map['name'],
-      color: Color(map['color']),
-      isFixed: map['isFixed'],
-      tasks: List<Map<String, dynamic>>.from(
-        (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
-      ),
-    );
-  }).toList();
+    final sectionData = sectionBox.get('list', defaultValue: []);
+    final sections = sectionData.map((e) {
+      final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
+      return Section(
+        id: map['id'],
+        name: map['name'],
+        color: Color(map['color']),
+        isFixed: map['isFixed'],
+        tasks: List<Map<String, dynamic>>.from(
+          (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
+        ),
+      );
+    }).toList();
 
-  final section = sections.firstWhere((s) => s.name == category);
-  return section.tasks;
-}
-
+    return sections.firstWhere((s) => s.name == category).tasks;
+  }
 
   void toggleExpand(String title) {
     setState(() {
@@ -129,8 +124,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   void _navigateToAddTask() async {
-    List sectionData = sectionBox.get('list', defaultValue: []);
-    List<Section> sections = sectionData.map((e) {
+    final sectionData = sectionBox.get('list', defaultValue: []);
+    final sections = sectionData.map((e) {
       final map = Map<String, dynamic>.from(e);
       return Section(
         id: map['id'],
@@ -153,14 +148,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
     if (result != null && result is Map<String, dynamic>) {
       final selectedSection = result['section'];
       final newTask = result['task'];
-      final dueDate = result['dueDate']; // optional
+      final dueDate = result['dueDate'];
 
       final index = sections.indexWhere((s) => s.name == selectedSection);
       if (index != -1) {
-        sections[index].tasks.add({
-          'text': newTask,
-          'dueDate': dueDate,
-        });
+        sections[index].tasks.add({'text': newTask, 'dueDate': dueDate});
         sectionBox.put('list', sections.map((s) => s.toMap()).toList());
         setState(() {});
       }
@@ -169,44 +161,54 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final sections = getAllSections();
-    final List<Widget> groups = [
-      for (int i = 0; i < sections.length; i++)
-        TodoGroup(
-          title: sections[i].name,
-          color: sections[i].color,
-          items: getTasks(sections[i].name),
-          showItems: _expanded[sections[i].name] ?? true,
-          trailingCount: getTasks(sections[i].name).length,
-          onToggle: () => toggleExpand(sections[i].name),
-          isLast: i == sections.length - 1,
-        ),
-    ];
+    return ValueListenableBuilder(
+      valueListenable: sectionBox.listenable(),
+      builder: (context, Box box, _) {
+        final sections = getAllSections();
+        final groups = [
+          for (int i = 0; i < sections.length; i++)
+            TodoGroup(
+              title: sections[i].name,
+              color: sections[i].color,
+              items: getTasks(sections[i].name),
+              showItems: _expanded[sections[i].name] ?? true,
+              trailingCount: getTasks(sections[i].name).length,
+              onToggle: () => toggleExpand(sections[i].name),
+              isLast: i == sections.length - 1,
+            ),
+        ];
 
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const _Header(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: OverlappingTaskList(taskGroups: groups),
-              ),
+        return Scaffold(
+          backgroundColor: AppColors.white,
+          body: SafeArea(
+            child: Column(
+              children: [
+                const _Header(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: OverlappingTaskList(taskGroups: groups),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+                  child: _FiltersBar(
+                    onExpandAll: expandAll,
+                    allExpanded: _allExpanded,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _AddTaskButton(onPressed: _navigateToAddTask),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-              child: _FiltersBar(onExpandAll: expandAll, allExpanded: _allExpanded),
-            ),
-            const SizedBox(height: 16),
-            _AddTaskButton(onPressed: _navigateToAddTask),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
+
+// Reusable Widgets
 
 class OverlappingTaskList extends StatelessWidget {
   final List<Widget> taskGroups;
@@ -218,7 +220,7 @@ class OverlappingTaskList extends StatelessWidget {
       children: [
         for (int i = 0; i < taskGroups.length; i++)
           Transform.translate(
-            offset: Offset(0, -25 * i.toDouble()),
+            offset: Offset(0, -25.0 * i),
             child: taskGroups[i],
           ),
       ],
@@ -254,7 +256,7 @@ class TodoGroup extends StatelessWidget {
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.only(bottom: 0),
-      padding: const EdgeInsets.only(top: 8, bottom: 0),
+      padding: const EdgeInsets.only(top: 8),
       constraints: BoxConstraints(minHeight: showItems ? 0 : 60),
       child: Column(
         children: [
@@ -269,14 +271,10 @@ class TodoGroup extends StatelessWidget {
             ),
           ),
           if (showItems)
-            ...items.asMap().entries.map((entry) {
-              int index = entry.key;
-              Map<String, dynamic> task = entry.value;
-              Widget itemWidget = _TodoItem(text: task['text'] ?? '');
-
+            ...items.map((task) {
               return Transform.translate(
                 offset: Offset(0, isLast ? -15 : -25),
-                child: itemWidget,
+                child: _TodoItem(text: task['text'] ?? ''),
               );
             }).toList(),
         ],
@@ -366,17 +364,11 @@ class _FiltersBar extends StatelessWidget {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 16),
             const SizedBox(width: 4),
             Flexible(
-              child: Text(
-                label,
-                style: AppTextStyles.chipText,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
+              child: Text(label, style: AppTextStyles.chipText, overflow: TextOverflow.ellipsis),
             ),
           ],
         ),

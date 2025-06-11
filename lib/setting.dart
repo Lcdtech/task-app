@@ -20,11 +20,12 @@ class _SettingsPageState extends State<SettingsPage> {
   Color _currentColor = Colors.red;
   late Box sectionBox;
 
-  static const double itemHeight = 50;
-  static const double overlap = 2;
+  static const double itemHeight = 71;
+  static const double overlap = 15;
 
   final uuid = Uuid();
   int? draggingIndex;
+  int? targetIndex;
 
   @override
   void initState() {
@@ -65,7 +66,8 @@ class _SettingsPageState extends State<SettingsPage> {
         builder: (_) => CreateSectionPage(
           onSectionCreated: (newSection) {
             final exists = sections.any((s) =>
-                s.name.trim().toLowerCase() == newSection.name.trim().toLowerCase());
+                s.name.trim().toLowerCase() ==
+                newSection.name.trim().toLowerCase());
 
             if (exists) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -87,21 +89,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _onReorder(int oldIndex, int newIndex) {
-    if (sections[oldIndex].isFixed) return;
-
-    if (newIndex >= sections.length - 1) {
-      newIndex = sections.length - 1;
-    }
-
-    setState(() {
-      if (newIndex > oldIndex) newIndex--;
-      final item = sections.removeAt(oldIndex);
-      sections.insert(newIndex, item);
-      _saveSections();
-    });
-  }
-
   void _deleteSection(int index) {
     if (sections[index].isFixed) return;
 
@@ -109,6 +96,26 @@ class _SettingsPageState extends State<SettingsPage> {
       sections.removeAt(index);
       _saveSections();
     });
+  }
+
+  double _getTileTop(int index) {
+    double baseTop = index * (itemHeight - overlap);
+
+    if (draggingIndex == null || targetIndex == null || draggingIndex == targetIndex) {
+      return baseTop;
+    }
+
+    if (index == draggingIndex) {
+      return baseTop;
+    }
+
+    if (index > draggingIndex! && index <= targetIndex!) {
+      return (index - 1) * (itemHeight - overlap);
+    } else if (index < draggingIndex! && index >= targetIndex!) {
+      return (index + 1) * (itemHeight - overlap);
+    }
+
+    return baseTop;
   }
 
   @override
@@ -130,38 +137,51 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       return AnimatedPositioned(
                         key: ValueKey(section.id),
-                        duration: const Duration(milliseconds: 300),
+                        duration: const Duration(milliseconds: 250),
                         curve: Curves.easeInOut,
-                        top: index * -25.0 + (index * 85),
+                        top: _getTileTop(index),
                         left: 0,
                         right: 0,
                         child: DragTarget<int>(
-                          onWillAccept: (fromIndex) =>
-                              fromIndex != null &&
-                              fromIndex != index &&
-                              !sections[index].isFixed,
+                          onWillAccept: (fromIndex) {
+                            if (fromIndex != null &&
+                                fromIndex != index &&
+                                !sections[index].isFixed) {
+                              if (targetIndex != index) {
+                                setState(() {
+                                  targetIndex = index;
+                                });
+                              }
+                              return true;
+                            }
+                            return false;
+                          },
+                          onLeave: (_) => setState(() => targetIndex = null),
                           onAccept: (fromIndex) {
-                          if (sections[fromIndex].isFixed) return;
+                            if (sections[fromIndex].isFixed) return;
 
-                          final fixedIndex = sections.lastIndexWhere((s) => s.isFixed);
-                          var insertIndex = index;
+                            final fixedIndex = sections.lastIndexWhere((s) => s.isFixed);
+                            var insertIndex = index;
 
-                          if (insertIndex >= fixedIndex) {
-                            insertIndex = fixedIndex - (fromIndex < fixedIndex ? 0 : 1);
-                          }
+                            if (insertIndex >= fixedIndex) {
+                              insertIndex = fixedIndex - (fromIndex < fixedIndex ? 0 : 1);
+                            }
 
-                          setState(() {
-                            final moved = sections.removeAt(fromIndex);
-                            sections.insert(insertIndex, moved);
-                            draggingIndex = null;
-                            _saveSections();
-                          });
-                        },
-
+                            setState(() {
+                              final moved = sections.removeAt(fromIndex);
+                              sections.insert(insertIndex, moved);
+                              draggingIndex = null;
+                              targetIndex = null;
+                              _saveSections();
+                            });
+                          },
                           builder: (context, candidateData, rejectedData) {
-                            final tile = Opacity(
-                              opacity: isDragging ? 0.0 : 1.0,
-                              child: _buildTile(index, section),
+                            final tile = Visibility(
+                              visible: !isDragging,
+                              maintainSize: true,
+                              maintainAnimation: true,
+                              maintainState: true,
+                              child: _buildTile(index, section, draggable: true),
                             );
 
                             return section.isFixed
@@ -173,12 +193,13 @@ class _SettingsPageState extends State<SettingsPage> {
                                     }),
                                     onDragEnd: (_) => setState(() {
                                       draggingIndex = null;
+                                      targetIndex = null;
                                     }),
                                     feedback: Material(
                                       color: Colors.transparent,
                                       child: SizedBox(
                                         width: MediaQuery.of(context).size.width - 32,
-                                        child: _buildTile(index, section),
+                                        child: _buildTile(index, section, draggable: true),
                                       ),
                                     ),
                                     child: tile,
@@ -219,36 +240,50 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildTile(int index, Section section) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Material(
-          elevation: 4,
-          borderRadius: BorderRadius.circular(20),
-          color: section.color,
-          child: Container(
-            height: section.isFixed ? 59 : 71,
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: ListTile(
-                title: Text(section.name, style: AppTextStyles.groupTitle),
-                trailing: section.isFixed
-                    ? const SizedBox.shrink()
-                    : IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.white),
-                        onPressed: () => _deleteSection(index),
-                      ),
-                leading: section.isFixed
-                    ? const Icon(Icons.lock, color: Colors.white)
+  Widget _buildTile(int index, Section section, {bool draggable = true}) {
+    final tile = Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(20),
+      color: section.color,
+      child: Container(
+        height: section.isFixed ? 56 : 71,
+        margin: EdgeInsets.only(bottom: section.isFixed ? 4 : 16),
+        padding: const EdgeInsets.only(left: 16, right: 16, top: 0),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: ListTile(
+            title: Text(section.name, style: AppTextStyles.groupTitle),
+            trailing: section.isFixed
+                ? const SizedBox.shrink()
+                : IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.white),
+                    onPressed: () => _deleteSection(index),
+                  ),
+            leading: section.isFixed
+                ? const Icon(Icons.lock, color: Colors.white)
+                : draggable
+                    ? Draggable<int>(
+                        data: index,
+                        onDragStarted: () => setState(() => draggingIndex = index),
+                        onDraggableCanceled: (_, __) => setState(() {
+                          draggingIndex = null;
+                          targetIndex = null;
+                        }),
+                        feedback: Material(
+                          color: Colors.transparent,
+                          child: SizedBox(
+                            width: MediaQuery.of(context).size.width - 32,
+                            child: _buildTile(index, section, draggable: false),
+                          ),
+                        ),
+                        child: const Icon(Icons.drag_indicator, color: Colors.white),
+                      )
                     : const Icon(Icons.drag_indicator, color: Colors.white),
-              ),
-            ),
           ),
         ),
-      ],
+      ),
     );
+
+    return tile;
   }
 }
