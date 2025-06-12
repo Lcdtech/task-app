@@ -124,40 +124,35 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   void _navigateToAddTask() async {
-    final sectionData = sectionBox.get('list', defaultValue: []);
-    final sections = sectionData.map((e) {
-      final map = Map<String, dynamic>.from(e);
-      return Section(
-        id: map['id'],
-        name: map['name'],
-        color: Color(map['color']),
-        isFixed: map['isFixed'],
-        tasks: List<Map<String, dynamic>>.from(map['tasks']),
-      );
-    }).toList();
-
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddTaskPage(
-          sectionNames: sections.map((s) => s.name).toList(),
-        ),
+  final sections = getAllSections();
+  
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => AddTaskPage(
+        sections: sections,
       ),
-    );
+    ),
+  );
 
-    if (result != null && result is Map<String, dynamic>) {
-      final selectedSection = result['section'];
-      final newTask = result['task'];
-      final dueDate = result['dueDate'];
+  if (result != null && result is Map<String, dynamic>) {
+    final selectedSectionId = result['sectionId'];
+    final newTask = result['task'];
+    final dueDate = result['dueDate'];
 
-      final index = sections.indexWhere((s) => s.name == selectedSection);
-      if (index != -1) {
-        sections[index].tasks.add({'text': newTask, 'dueDate': dueDate});
-        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-        setState(() {});
-      }
+    final index = sections.indexWhere((s) => s.id == selectedSectionId);
+    if (index != -1) {
+      sections[index].tasks.add({
+        'id': const Uuid().v4(),  // Add unique ID for each task
+        'text': newTask, 
+        'dueDate': dueDate,
+        'completed': false,
+      });
+      sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      setState(() {});
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

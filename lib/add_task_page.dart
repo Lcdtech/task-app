@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../models/section.dart';
 
 class AddTaskPage extends StatefulWidget {
-  final List<String> sectionNames;
+  final List<Section> sections;
 
-  const AddTaskPage({Key? key, required this.sectionNames}) : super(key: key);
+  const AddTaskPage({Key? key, required this.sections}) : super(key: key);
 
   @override
   State<AddTaskPage> createState() => _AddTaskPageState();
@@ -12,7 +13,7 @@ class AddTaskPage extends StatefulWidget {
 
 class _AddTaskPageState extends State<AddTaskPage> {
   final _controller = TextEditingController();
-  String? selectedSection;
+  String? selectedSectionId;
   DateTime? selectedDate;
 
   Future<void> _pickDueDate() async {
@@ -43,14 +44,26 @@ class _AddTaskPageState extends State<AddTaskPage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            DropdownButtonFormField<String>(
+           DropdownButtonFormField<String>(
               isExpanded: true,
-              value: selectedSection,
+              value: selectedSectionId,
               hint: const Text('Select Section'),
-              items: widget.sectionNames.map((name) {
-                return DropdownMenuItem(value: name, child: Text(name));
+              items: widget.sections.map((section) {
+                return DropdownMenuItem(
+                  value: section.id,
+                  child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: section.color,
+                          radius: 6,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(section.name),
+                      ],
+                    ),
+                );
               }).toList(),
-              onChanged: (val) => setState(() => selectedSection = val),
+              onChanged: (val) => setState(() => selectedSectionId = val),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -72,9 +85,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
             ElevatedButton.icon(
               onPressed: () {
                 final task = _controller.text.trim();
-                if (selectedSection != null && task.isNotEmpty) {
+                if (selectedSectionId != null && task.isNotEmpty) {
                   Navigator.pop(context, {
-                    'section': selectedSection!,
+                    'sectionId': selectedSectionId!,
                     'task': task,
                     'dueDate': selectedDate?.toIso8601String(),
                   });
