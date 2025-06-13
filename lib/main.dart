@@ -71,6 +71,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   final Box sectionBox = Hive.box('sections');
   final Map<String, bool> _expanded = {};
   bool _allExpanded = false;
+  Set<String> selectedFilters = {};
 
   List<Section> getAllSections() {
     final rawList = sectionBox.get('list');
@@ -108,20 +109,21 @@ class _TodoHomePageState extends State<TodoHomePage> {
     return sections.firstWhere((s) => s.name == category).tasks;
   }
 
-  void toggleExpand(String title) {
-    setState(() {
-      _expanded[title] = !(_expanded[title] ?? false);
-    });
+  void toggleExpand(String id) {
+  setState(() {
+    _expanded[id] = !(_expanded[id] ?? false);
+  });
   }
 
-  void expandAll() {
+  void expandAll(List<Section> sections) {
     setState(() {
       _allExpanded = !_allExpanded;
-      for (var key in _expanded.keys) {
-        _expanded[key] = _allExpanded;
+      for (var section in sections) {
+        _expanded[section.id] = _allExpanded;
       }
     });
   }
+
 
   void _navigateToAddTask() async {
   final sections = getAllSections();
@@ -163,12 +165,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
         final groups = [
           for (int i = 0; i < sections.length; i++)
             TodoGroup(
+              id:sections[i].id,
               title: sections[i].name,
               color: sections[i].color,
               items: getTasks(sections[i].name),
-              showItems: _expanded[sections[i].name] ?? true,
+              showItems: _expanded[sections[i].id] ?? true,
               trailingCount: getTasks(sections[i].name).length,
-              onToggle: () => toggleExpand(sections[i].name),
+              onToggle: () => toggleExpand(sections[i].id),
               isLast: i == sections.length - 1,
             ),
         ];
@@ -188,7 +191,17 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
                   child: _FiltersBar(
-                    onExpandAll: expandAll,
+                    selectedFilters: selectedFilters,
+                    onFilterToggle: (filter) {
+                      setState(() {
+                        if (selectedFilters.contains(filter)) {
+                          selectedFilters.remove(filter);
+                        } else {
+                          selectedFilters.add(filter);
+                        }
+                      });
+                    },
+                    onExpandAll: () => expandAll(sections),
                     allExpanded: _allExpanded,
                   ),
                 ),
@@ -224,6 +237,7 @@ class OverlappingTaskList extends StatelessWidget {
 }
 
 class TodoGroup extends StatelessWidget {
+  final String id;
   final String title;
   final Color color;
   final List<Map<String, dynamic>> items;
@@ -234,6 +248,7 @@ class TodoGroup extends StatelessWidget {
 
   const TodoGroup({
     Key? key,
+    required this.id,
     required this.title,
     required this.color,
     required this.items,
@@ -256,12 +271,13 @@ class TodoGroup extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(
-            height: isLast ? 59 : 71,
+            height: isLast ? 56 : 71,
             child: ListTile(
               dense: true,
               visualDensity: VisualDensity.compact,
               onTap: onToggle,
-              title: Text(title, style: AppTextStyles.groupTitle),
+              title: Text(title, style: AppTextStyles.groupTitle,maxLines: 1,
+               overflow: TextOverflow.ellipsis,),
               trailing: Text('$count', style: AppTextStyles.groupTitle),
             ),
           ),
@@ -303,7 +319,8 @@ class _TodoItem extends StatelessWidget {
               checkColor: AppColors.white,
               activeColor: AppColors.white,
             ),
-            title: Text(text, style: AppTextStyles.taskItem),
+            title: Text(text, style: AppTextStyles.taskItem,maxLines: 1,
+            overflow: TextOverflow.ellipsis),
           ),
         ),
       ),
@@ -342,49 +359,155 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _FiltersBar extends StatelessWidget {
+class _FiltersBar extends StatefulWidget {
   final VoidCallback? onExpandAll;
   final bool allExpanded;
-  const _FiltersBar({Key? key, this.onExpandAll, this.allExpanded = false}) : super(key: key);
+  final Set<String> selectedFilters;
+  final void Function(String) onFilterToggle;
+  
+  const _FiltersBar({
+    Key? key,
+    required this.selectedFilters, 
+    required this.onFilterToggle, 
+    this.onExpandAll, 
+    this.allExpanded = false,
+  }) : super(key: key);
 
-  Widget _buildChip(IconData icon, String label, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: 108,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+  @override
+  State<_FiltersBar> createState() => __FiltersBarState();
+}
+
+class __FiltersBarState extends State<_FiltersBar> {
+  int selectedIndex = 0;
+  final List<String> labels = ['Color', 'Due Date'];
+  final List<IconData> icons = [Icons.color_lens_outlined, Icons.date_range_outlined];
+
+  @override
+  Widget build(BuildContext context) {
+    final isSmallScreen = MediaQuery.of(context).size.width < 370;
+
+    if (isSmallScreen) {
+      // 👉 Stack vertically on narrow screens
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 16),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(label, style: AppTextStyles.chipText, overflow: TextOverflow.ellipsis),
+            _buildToggleSegment(), // toggle chips
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _buildExpandChip(), // "Expand All" button
             ),
           ],
+        ),
+      );
+    } else {
+      // 👉 Normal horizontal layout for wider screens
+      return Padding(
+        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+        child: Row(
+          children: [
+            _buildToggleSegment(),
+            const Spacer(),
+            _buildExpandChip(),
+          ],
+        ),
+      );
+    }
+  }
+  
+    Widget _buildToggleSegment() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(labels.length, (index) {
+            final isSelected = index == selectedIndex;
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  selectedIndex = index;
+                });
+                widget.onFilterToggle(labels[index]);
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: isSelected
+                      ? [BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 2))]
+                      : [],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      icons[index],
+                      size: 16,
+                      color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      labels[index],
+                      style: AppTextStyles.chipText.copyWith(
+                        color: isSelected ? Colors.black : Colors.grey.shade600,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
         ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _buildChip(Icons.color_lens_outlined, 'Color'),
-        const SizedBox(width: 8),
-        _buildChip(Icons.date_range_outlined, 'Due Date'),
-        const Spacer(),
-        _buildChip(
-          Icons.unfold_more,
-          allExpanded ? 'Collapse All' : 'Expand All',
-          onTap: onExpandAll,
+
+  Widget _buildExpandChip() {
+    final label = widget.allExpanded ? 'Collapse All' : 'Expand All';
+
+    return InkWell(
+      onTap: widget.onExpandAll,
+      child: SizedBox(
+        width:112,
+        child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black, width: 0.5), // 🔲 black border
         ),
-      ],
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 16, // fixed space for icon
+              child: Icon(widget.allExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: Colors.black),
+            ),
+            const SizedBox(width: 4),
+             Expanded(
+              child: Text(
+                label,
+                style: AppTextStyles.chipText.copyWith(color: Colors.black),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      )
     );
   }
 }

@@ -248,11 +248,12 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Container(
         height: section.isFixed ? 56 : 71,
         margin: EdgeInsets.only(bottom: section.isFixed ? 4 : 16),
-        padding: const EdgeInsets.only(left: 16, right: 16, top: 0),
+        padding: const EdgeInsets.only(left: 8, right: 0, top: 0),
         child: Align(
           alignment: Alignment.centerLeft,
           child: ListTile(
-            title: Text(section.name, style: AppTextStyles.groupTitle),
+            title: Text(section.name, style: AppTextStyles.groupTitle,maxLines: 1,
+             overflow: TextOverflow.ellipsis),
             trailing: section.isFixed
                 ? const SizedBox.shrink()
                 : IconButton(
