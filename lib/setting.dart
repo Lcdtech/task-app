@@ -59,35 +59,45 @@ class _SettingsPageState extends State<SettingsPage> {
     sectionBox.put('list', sections.map((s) => s.toMap()).toList());
   }
 
-  void _navigateToCreateSectionPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CreateSectionPage(
-          onSectionCreated: (newSection) {
-            final exists = sections.any((s) =>
-                s.name.trim().toLowerCase() ==
-                newSection.name.trim().toLowerCase());
-
-            if (exists) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('A section with this name already exists.'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-              return;
-            }
-
-            setState(() {
-              sections.insert(sections.length - 1, newSection);
-              _saveSections();
-            });
-          },
-        ),
+  void _showCreateSectionModal() {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-    );
-  }
+      child: CreateSectionModal(
+        onSectionCreated: (newSection) {
+          final exists = sections.any((s) =>
+              s.name.trim().toLowerCase() == newSection.name.trim().toLowerCase());
+
+          if (exists) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('A section with this name already exists.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+
+          setState(() {
+            sections.insert(sections.length - 1, newSection);
+            _saveSections();
+          });
+
+          Navigator.of(context).pop(); // Close modal
+        },
+      ),
+    ),
+    isDismissible: true,
+  );
+}
+
 
   void _deleteSection(int index) {
     if (sections[index].isFixed) return;
@@ -226,7 +236,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                onPressed: _navigateToCreateSectionPage,
+                onPressed: _showCreateSectionModal,
                 icon: const Icon(Icons.add, color: Colors.black),
                 label: const Text(
                   'Create Section',

@@ -71,7 +71,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   final Box sectionBox = Hive.box('sections');
   final Map<String, bool> _expanded = {};
   bool _allExpanded = false;
-  Set<String> selectedFilters = {};
+  String currentFilter = 'Color';
 
   List<Section> getAllSections() {
     final rawList = sectionBox.get('list');
@@ -91,68 +91,181 @@ class _TodoHomePageState extends State<TodoHomePage> {
     }).toList();
   }
 
-  List<Map<String, dynamic>> getTasks(String category) {
-    final sectionData = sectionBox.get('list', defaultValue: []);
-    final sections = sectionData.map((e) {
-      final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
-      return Section(
-        id: map['id'],
-        name: map['name'],
-        color: Color(map['color']),
-        isFixed: map['isFixed'],
-        tasks: List<Map<String, dynamic>>.from(
-          (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
-        ),
-      );
-    }).toList();
-
-    return sections.firstWhere((s) => s.name == category).tasks;
-  }
-
   void toggleExpand(String id) {
-  setState(() {
-    _expanded[id] = !(_expanded[id] ?? false);
-  });
+    setState(() {
+      _expanded[id] = !(_expanded[id] ?? false);
+    });
   }
 
   void expandAll(List<Section> sections) {
     setState(() {
       _allExpanded = !_allExpanded;
-      for (var section in sections) {
-        _expanded[section.id] = _allExpanded;
+      
+      if (currentFilter == 'Color') {
+        // Expand/collapse section groups
+        for (var section in sections) {
+          _expanded[section.id] = _allExpanded;
+        }
+      } else {
+        // Expand/collapse date groups
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final tomorrow = today.add(const Duration(days: 1));
+        
+        // Get all date categories (similar to _buildTaskGroups logic)
+        final dateCategories = <String>{};
+        for (final section in sections) {
+          for (final task in section.tasks) {
+            if (task['dueDate'] != null) {
+              final dueDate = DateTime.parse(task['dueDate']);
+              if (dueDate.isBefore(today)) continue;
+              
+              String category;
+              if (dueDate.isBefore(tomorrow)) {
+                category = 'Today';
+              } else if (dueDate.isBefore(tomorrow.add(const Duration(days: 1)))) {
+                category = 'Tomorrow';
+              } else if (dueDate.year == now.year && dueDate.month == now.month) {
+                category = DateFormat('d MMMM y').format(dueDate);
+              } else {
+                category = DateFormat('MMMM y').format(dueDate);
+              }
+              
+              dateCategories.add(category);
+            }
+          }
+        }
+        
+        // Set expanded state for all date groups
+        for (final category in dateCategories) {
+          _expanded['date_$category'] = _allExpanded;
+        }
       }
     });
   }
 
-
   void _navigateToAddTask() async {
-  final sections = getAllSections();
-  
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => AddTaskPage(
-        sections: sections,
+    final sections = getAllSections();
+    
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddTaskPage(
+          sections: sections,
+        ),
       ),
-    ),
-  );
+    );
 
-  if (result != null && result is Map<String, dynamic>) {
-    final selectedSectionId = result['sectionId'];
-    final newTask = result['task'];
-    final dueDate = result['dueDate'];
+    if (result != null && result is Map<String, dynamic>) {
+      final selectedSectionId = result['sectionId'];
+      final newTask = result['task'];
+      final dueDate = result['dueDate'];
 
-    final index = sections.indexWhere((s) => s.id == selectedSectionId);
-    if (index != -1) {
-      sections[index].tasks.add({
-        'id': const Uuid().v4(),  // Add unique ID for each task
-        'text': newTask, 
-        'dueDate': dueDate,
-        'completed': false,
-      });
-      sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-      setState(() {});
+      final index = sections.indexWhere((s) => s.id == selectedSectionId);
+      if (index != -1) {
+        sections[index].tasks.add({
+          'id': const Uuid().v4(),
+          'text': newTask, 
+          'dueDate': dueDate,
+          'completed': false,
+        });
+        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+        setState(() {});
+      }
     }
+  }
+
+  List<Widget> _buildTaskGroups(List<Section> sections) {
+  if (currentFilter == 'Color') {
+    return [
+      for (int i = 0; i < sections.length; i++)
+        TodoGroup(
+          id: sections[i].id,
+          title: sections[i].name,
+          color: sections[i].color,
+          items: sections[i].tasks,
+          showItems: _expanded[sections[i].id] ?? true,
+          trailingCount: sections[i].tasks.length,
+          onToggle: () => toggleExpand(sections[i].id),
+          isLast: i == sections.length - 1,
+        ),
+    ];
+  } else {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    
+    final tasksByDate = <String, List<Map<String, dynamic>>>{};
+    final sectionColors = <String, Color>{}; // Store color for each task
+    
+    for (final section in sections) {
+      for (final task in section.tasks) {
+        if (task['dueDate'] != null) {
+          final dueDate = DateTime.parse(task['dueDate']);
+          if (dueDate.isBefore(today)) continue;
+          
+          String category;
+          if (dueDate.isBefore(tomorrow)) {
+            category = 'Today';
+          } else if (dueDate.isBefore(tomorrow.add(const Duration(days: 1)))) {
+            category = 'Tomorrow';
+          } else if (dueDate.year == now.year && dueDate.month == now.month) {
+            category = DateFormat('d MMMM y').format(dueDate);
+          } else {
+            category = DateFormat('MMMM y').format(dueDate);
+          }
+          
+          tasksByDate.putIfAbsent(category, () => []);
+          // Add the section color to the task map
+          final taskWithColor = Map<String, dynamic>.from(task);
+          taskWithColor['sectionColor'] = section.color.value;
+          tasksByDate[category]!.add(taskWithColor);
+        }
+      }
+    }
+    
+    final sortedCategories = tasksByDate.keys.toList()
+      ..sort((a, b) {
+        if (a == 'Today') return -1;
+        if (b == 'Today') return 1;
+        if (a == 'Tomorrow') return -1;
+        if (b == 'Tomorrow') return 1;
+        
+        try {
+          final dateA = DateFormat('d MMMM y').parse(a);
+          final dateB = DateFormat('d MMMM y').parse(b);
+          return dateA.compareTo(dateB);
+        } catch (e) {
+          try {
+            final dateA = DateFormat('MMMM y').parse(a);
+            final dateB = DateFormat('MMMM y').parse(b);
+            return dateA.compareTo(dateB);
+          } catch (e) {
+            return a.compareTo(b);
+          }
+        }
+      });
+    
+    // Initialize expanded state for date groups if not already set
+    for (final category in sortedCategories) {
+      final groupId = 'date_$category';
+      _expanded.putIfAbsent(groupId, () => true);
+    }
+    
+    return [
+      for (int i = 0; i < sortedCategories.length; i++)
+        TodoGroup(
+          id: 'date_${sortedCategories[i]}',
+          title: sortedCategories[i],
+          color: Colors.white, // Use white background for date groups
+          items: tasksByDate[sortedCategories[i]]!,
+          showItems: _expanded['date_${sortedCategories[i]}'] ?? true,
+          trailingCount: tasksByDate[sortedCategories[i]]!.length,
+          onToggle: () => toggleExpand('date_${sortedCategories[i]}'),
+          isLast: i == sortedCategories.length - 1,
+          isDateGroup: true,
+        ),
+    ];
   }
 }
 
@@ -162,19 +275,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
       valueListenable: sectionBox.listenable(),
       builder: (context, Box box, _) {
         final sections = getAllSections();
-        final groups = [
-          for (int i = 0; i < sections.length; i++)
-            TodoGroup(
-              id:sections[i].id,
-              title: sections[i].name,
-              color: sections[i].color,
-              items: getTasks(sections[i].name),
-              showItems: _expanded[sections[i].id] ?? true,
-              trailingCount: getTasks(sections[i].name).length,
-              onToggle: () => toggleExpand(sections[i].id),
-              isLast: i == sections.length - 1,
-            ),
-        ];
+        final groups = _buildTaskGroups(sections);
 
         return Scaffold(
           backgroundColor: AppColors.white,
@@ -189,16 +290,12 @@ class _TodoHomePageState extends State<TodoHomePage> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+                  padding: const EdgeInsets.only(top: 8, left: 8, right: 8),
                   child: _FiltersBar(
-                    selectedFilters: selectedFilters,
+                    selectedFilters: {currentFilter},
                     onFilterToggle: (filter) {
                       setState(() {
-                        if (selectedFilters.contains(filter)) {
-                          selectedFilters.remove(filter);
-                        } else {
-                          selectedFilters.add(filter);
-                        }
+                        currentFilter = filter;
                       });
                     },
                     onExpandAll: () => expandAll(sections),
@@ -215,8 +312,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
     );
   }
 }
-
-// Reusable Widgets
 
 class OverlappingTaskList extends StatelessWidget {
   final List<Widget> taskGroups;
@@ -245,6 +340,7 @@ class TodoGroup extends StatelessWidget {
   final bool showItems;
   final VoidCallback? onToggle;
   final bool isLast;
+  final bool isDateGroup;
 
   const TodoGroup({
     Key? key,
@@ -256,6 +352,7 @@ class TodoGroup extends StatelessWidget {
     this.showItems = true,
     this.onToggle,
     this.isLast = false,
+    this.isDateGroup = false,
   }) : super(key: key);
 
   @override
@@ -264,7 +361,11 @@ class TodoGroup extends StatelessWidget {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: isDateGroup ? Colors.white : color,
+        borderRadius: BorderRadius.circular(16),
+        border: isDateGroup ? Border.all(color: Colors.grey.shade300) : null,
+      ),
       margin: const EdgeInsets.only(bottom: 0),
       padding: const EdgeInsets.only(top: 8),
       constraints: BoxConstraints(minHeight: showItems ? 0 : 60),
@@ -276,16 +377,34 @@ class TodoGroup extends StatelessWidget {
               dense: true,
               visualDensity: VisualDensity.compact,
               onTap: onToggle,
-              title: Text(title, style: AppTextStyles.groupTitle,maxLines: 1,
-               overflow: TextOverflow.ellipsis,),
-              trailing: Text('$count', style: AppTextStyles.groupTitle),
+              title: Text(
+                title,
+                style: isDateGroup
+                  ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
+                  : AppTextStyles.groupTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Text(
+                '$count',
+                style: isDateGroup
+                  ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
+                  : AppTextStyles.groupTitle,
+              ),
             ),
           ),
           if (showItems)
             ...items.map((task) {
               return Transform.translate(
                 offset: Offset(0, isLast ? -15 : -25),
-                child: _TodoItem(text: task['text'] ?? ''),
+                child: _TodoItem(
+                  text: task['text'] ?? '',
+                  isDateGroup: isDateGroup,
+                  dueDate: task['dueDate'],
+                  taskColor: task['sectionColor'] != null 
+                  ? Color(task['sectionColor']) 
+                  : null, 
+                ),
               );
             }).toList(),
         ],
@@ -294,42 +413,145 @@ class TodoGroup extends StatelessWidget {
   }
 }
 
-class _TodoItem extends StatelessWidget {
+class _TodoItem extends StatefulWidget {
   final String text;
-  const _TodoItem({Key? key, required this.text}) : super(key: key);
+  final bool isDateGroup;
+  final String? dueDate;
+  final Color? taskColor;
+
+  const _TodoItem({
+    Key? key,
+    required this.text,
+    this.isDateGroup = false,
+    this.dueDate,
+    this.taskColor,
+  }) : super(key: key);
+
+  @override
+  State<_TodoItem> createState() => _TodoItemState();
+}
+
+class _TodoItemState extends State<_TodoItem> {
+  bool isChecked = false;
 
   @override
   Widget build(BuildContext context) {
+    final itemHeight = widget.dueDate != null ? 64.0 : 48.0;
+    final circleSize = 24.0;
+
     return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: AppColors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Center(
-          child: ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            leading: Checkbox(
-              value: false,
-              onChanged: (_) {},
-              side: const BorderSide(color: AppColors.white, width: 1.6),
-              checkColor: AppColors.white,
-              activeColor: AppColors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            height: itemHeight,
+            decoration: BoxDecoration(
+              color: widget.isDateGroup
+                  ? Colors.grey.shade100
+                  : AppColors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
-            title: Text(text, style: AppTextStyles.taskItem,maxLines: 1,
-            overflow: TextOverflow.ellipsis),
+            child: Padding(
+              padding: EdgeInsets.only(left: circleSize / 2 + 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // ✅ Checkbox with toggle logic
+                CustomCheckbox(
+                isChecked: isChecked,
+                isDateGroup: widget.isDateGroup,
+
+                onTap: () {
+                  setState(() {
+                    isChecked = !isChecked;
+                  });
+                },
+              ),
+
+
+
+
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.text,
+                          style: widget.isDateGroup
+                              ? AppTextStyles.taskItem
+                                  .copyWith(color: Colors.black)
+                              : AppTextStyles.taskItem,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (widget.dueDate != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              _formatDueDate(widget.dueDate!),
+                              style: AppTextStyles.taskItem.copyWith(
+                                color: widget.isDateGroup
+                                    ? Colors.grey.shade600
+                                    : AppColors.white.withOpacity(0.8),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
+
+          // Left color marker
+          if (widget.isDateGroup && widget.taskColor != null)
+            Positioned(
+              left: 0,
+              top: itemHeight / 2 - circleSize / 2,
+              child: Container(
+                width: circleSize / 2,
+                height: circleSize,
+                decoration: BoxDecoration(
+                  color: widget.taskColor,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(circleSize / 2),
+                    bottomRight: Radius.circular(circleSize / 2),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
+
+  String _formatDueDate(String dateString) {
+    final date = DateTime.parse(dateString);
+    return DateFormat('MMM d, h:mm a').format(date);
+  }
 }
+
 
 class _Header extends StatelessWidget {
   const _Header({Key? key}) : super(key: key);
+
+  String getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) {
+      return 'Good Morning';
+    } else if (hour >= 12 && hour < 17) {
+      return 'Good Afternoon';
+    } else {
+      return 'Good Evening';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -340,7 +562,7 @@ class _Header extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              '👋 Good Morning',
+              '👋🏻 ${getGreeting()}',
               style: AppTextStyles.header,
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -384,12 +606,12 @@ class __FiltersBarState extends State<_FiltersBar> {
 
   @override
   Widget build(BuildContext context) {
-    final isSmallScreen = MediaQuery.of(context).size.width < 370;
+      final isSmallScreen = MediaQuery.of(context).size.width < 340;
 
     if (isSmallScreen) {
       // 👉 Stack vertically on narrow screens
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -405,7 +627,7 @@ class __FiltersBarState extends State<_FiltersBar> {
     } else {
       // 👉 Normal horizontal layout for wider screens
       return Padding(
-        padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+        padding: const EdgeInsets.only(top: 8, left: 8, right: 8),
         child: Row(
           children: [
             _buildToggleSegment(),
@@ -417,62 +639,48 @@ class __FiltersBarState extends State<_FiltersBar> {
     }
   }
   
-    Widget _buildToggleSegment() {
+  Widget _buildToggleSegment() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
         borderRadius: BorderRadius.circular(30),
       ),
-      padding: const EdgeInsets.all(4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(labels.length, (index) {
-            final isSelected = index == selectedIndex;
-            return GestureDetector(
-              onTap: () {
-                setState(() {
-                  selectedIndex = index;
-                });
-                widget.onFilterToggle(labels[index]);
-              },
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: isSelected
-                      ? [BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 2))]
-                      : [],
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      icons[index],
-                      size: 16,
-                      color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      labels[index],
-                      style: AppTextStyles.chipText.copyWith(
-                        color: isSelected ? Colors.black : Colors.grey.shade600,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+      padding: const EdgeInsets.all(2),
+      child: Row(
+        children: List.generate(labels.length, (index) {
+          final isSelected = widget.selectedFilters.contains(labels[index]);
+          return GestureDetector(
+            onTap: () {
+              widget.onFilterToggle(labels[index]);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
               ),
-            );
-          }),
-        ),
+              child: Row(
+                children: [
+                  Icon(
+                    icons[index],
+                    size: 16,
+                    color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    labels[index],
+                    style: AppTextStyles.chipText.copyWith(
+                      color: isSelected ? Colors.black : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
-
 
   Widget _buildExpandChip() {
     final label = widget.allExpanded ? 'Collapse All' : 'Expand All';
@@ -510,6 +718,7 @@ class __FiltersBarState extends State<_FiltersBar> {
       )
     );
   }
+
 }
 
 class _AddTaskButton extends StatelessWidget {
@@ -519,7 +728,7 @@ class _AddTaskButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: SizedBox(
         width: double.infinity,
         height: 52,
@@ -532,6 +741,43 @@ class _AddTaskButton extends StatelessWidget {
           icon: const Icon(Icons.add, color: AppColors.white),
           label: Text('Add Task', style: AppTextStyles.buttonText),
         ),
+      ),
+    );
+  }
+}
+
+class CustomCheckbox extends StatelessWidget {
+  final bool isChecked;
+  final VoidCallback onTap;
+  final bool isDateGroup;
+
+  const CustomCheckbox({
+    Key? key,
+    required this.isChecked,
+    required this.onTap,
+    required this.isDateGroup,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = isDateGroup ? Colors.grey : AppColors.white;
+    final checkColor = isDateGroup ? Colors.black : AppColors.white;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: isChecked ? Colors.transparent : Colors.white,
+          border: isChecked
+              ? Border.all(color: borderColor, width: 1.6)
+              : null,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: isChecked
+            ? Icon(Icons.check, size: 16, color: checkColor)
+            : null,
       ),
     );
   }

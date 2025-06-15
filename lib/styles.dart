@@ -16,7 +16,7 @@ class AppColors {
 class AppTextStyles {
   static final header = GoogleFonts.montserrat(
     fontSize: 28,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
   );
 
   static final groupTitle = GoogleFonts.montserrat(
