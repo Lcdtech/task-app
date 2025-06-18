@@ -6,7 +6,6 @@ import 'package:uuid/uuid.dart';
 import 'styles.dart';
 import '../models/section.dart';
 import 'create_section_page.dart';
-import 'package:flutter/cupertino.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -22,7 +21,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late Box sectionBox;
   String currentFilter = 'Hide';
 
-  static const double itemHeight = 75;
+  static const double itemHeight = 71;
   static const double overlap = 15;
 
   final uuid = Uuid();
@@ -111,6 +110,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   double _getTileTop(int index) {
+    print(targetIndex);
     
     double baseTop =  index * (itemHeight - overlap);
 
@@ -129,34 +129,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     return baseTop;
-  }
-
-  // New method to move a section up
-  void _moveSectionUp(int index) {
-    if (index > 0 && !sections[index].isFixed) {
-      final targetIndex = index - 1;
-      if (!sections[targetIndex].isFixed) { // Only swap if the target is not fixed
-        setState(() {
-          final section = sections.removeAt(index);
-          sections.insert(targetIndex, section);
-          _saveSections();
-        });
-      }
-    }
-  }
-
-  // New method to move a section down
-  void _moveSectionDown(int index) {
-    if (index < sections.length - 1 && !sections[index].isFixed) {
-      final targetIndex = index + 1;
-      if (!sections[targetIndex].isFixed) { // Only swap if the target is not fixed
-        setState(() {
-          final section = sections.removeAt(index);
-          sections.insert(targetIndex, section);
-          _saveSections();
-        });
-      }
-    }
   }
 
   @override
@@ -266,9 +238,71 @@ class _SettingsPageState extends State<SettingsPage> {
                         top: _getTileTop(index),
                         left: 0,
                         right: 0,
-                        child: _buildTile(
-                          index,
-                          section,
+                        child: DragTarget<int>(
+                          onWillAccept: (fromIndex) {
+                            if (fromIndex != null &&
+                                fromIndex != index &&
+                                !sections[index].isFixed) {
+                              if (targetIndex != index) {
+                                setState(() {
+                                  print('Target index set to $index');
+                                  targetIndex = index;
+                                });
+                              }
+                              return true;
+                            }
+                            return false;
+                          },
+                          onLeave: (_) => {
+                            setState(() => targetIndex = null)},
+                          onAccept: (fromIndex) {
+                            if (sections[fromIndex].isFixed) return;
+
+                            final fixedIndex = sections.lastIndexWhere((s) => s.isFixed);
+                            var insertIndex = index;
+
+                            if (insertIndex >= fixedIndex) {
+                              insertIndex = fixedIndex - (fromIndex < fixedIndex ? 0 : 1);
+                            }
+
+                            setState(() {
+                              final moved = sections.removeAt(fromIndex);
+                              sections.insert(insertIndex, moved);
+                              draggingIndex = null;
+                              targetIndex = null;
+                              _saveSections();
+                            });
+                          },
+                          builder: (context, candidateData, rejectedData) {
+                            final tile = Visibility(
+                              visible: !isDragging,
+                              maintainSize: true,
+                              maintainAnimation: true,
+                              maintainState: true,
+                              child: _buildTile(index, section, draggable: true),
+                            );
+
+                            return section.isFixed
+                                ? tile
+                                : LongPressDraggable<int>(
+                                    data: index,
+                                    onDragStarted: () => setState(() {
+                                      draggingIndex = index;
+                                    }),
+                                    onDragEnd: (_) => setState(() {
+                                      draggingIndex = null;
+                                      targetIndex = null;
+                                    }),
+                                    feedback: Material(
+                                      color: Colors.transparent,
+                                      child: SizedBox(
+                                        width: MediaQuery.of(context).size.width - 32,
+                                        child: _buildTile(index, section, draggable: true),
+                                      ),
+                                    ),
+                                    child: tile,
+                                  );
+                          },
                         ),
                       );
                     }),
@@ -335,57 +369,52 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildTile(int index, Section section) {
-    return Material(
+  Widget _buildTile(int index, Section section, {bool draggable = true}) {
+    final tile = Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(20),
       color: section.color,
       child: Container(
-        height: section.isFixed ? 59 : 71, // Adjusted height for fixed items for better consistency
+        height: section.isFixed ? 59 : 71,
         margin: EdgeInsets.only(bottom: section.isFixed ? 4 : 16),
-        padding: const EdgeInsets.only(left: 0, right: 0, top: 0),
+        padding: const EdgeInsets.only(left: 8, right: 0, top: 0),
         child: Align(
           alignment: Alignment.centerLeft,
           child: ListTile(
-            title: Text(
-              section.name,
-              style: AppTextStyles.groupTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-             leading: section.isFixed
-                ? IconButton(
-                        icon: const Icon(Icons.lock, color: Colors.white), // iOS lock icon
-                        onPressed: (){},
-                      )
-                : IconButton(
-                        icon: const Icon(CupertinoIcons.chevron_up, color: Colors.white), // iOS up arrow
-                        onPressed: index > 0 && !sections[index - 1].isFixed
-                            ? () => _moveSectionUp(index)
-                            : null,
-                      ),
+            title: Text(section.name, style: AppTextStyles.groupTitle,maxLines: 1,
+             overflow: TextOverflow.ellipsis),
             trailing: section.isFixed
                 ? const SizedBox.shrink()
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(CupertinoIcons.chevron_down, color: Colors.white), // iOS down arrow
-                        onPressed: index < sections.length - 1 && !sections[index + 1].isFixed && !sections[index].isFixed
-                            ? () => _moveSectionDown(index)
-                            : null,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.white), // iOS delete icon
-                        onPressed: () => _deleteSection(index),
-                      ),
-                    ],
+                : IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.white),
+                    onPressed: () => _deleteSection(index),
                   ),
-          
+            leading: section.isFixed
+                ? const Icon(Icons.lock, color: Colors.white)
+                : draggable
+                    ? Draggable<int>(
+                        data: index,
+                        onDragStarted: () => setState(() => draggingIndex = index),
+                        onDraggableCanceled: (_, __) => setState(() {
+                          draggingIndex = null;
+                          targetIndex = null;
+                        }),
+                        feedback: Material(
+                          color: Colors.transparent,
+                          child: SizedBox(
+                            width: MediaQuery.of(context).size.width - 32,
+                            child: _buildTile(index, section, draggable: false),
+                          ),
+                        ),
+                        child: const Icon(Icons.drag_indicator, color: Colors.white),
+                      )
+                    : const Icon(Icons.drag_indicator, color: Colors.white),
           ),
         ),
       ),
     );
+
+    return tile;
   }
 }
 
@@ -503,5 +532,3 @@ final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
   }
 
 }
-
-  
