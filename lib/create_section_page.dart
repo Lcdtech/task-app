@@ -6,8 +6,15 @@ import 'styles.dart';
 
 class CreateSectionModal extends StatefulWidget {
   final Function(Section) onSectionCreated;
+  final String? errorText;
+  final void Function(String)? onError;
 
-  const CreateSectionModal({super.key, required this.onSectionCreated});
+  const CreateSectionModal({
+    super.key,
+    required this.onSectionCreated,
+    this.errorText,
+    this.onError,
+  });
 
   @override
   State<CreateSectionModal> createState() => _CreateSectionModalState();
@@ -16,18 +23,36 @@ class CreateSectionModal extends StatefulWidget {
 class _CreateSectionModalState extends State<CreateSectionModal> {
   final TextEditingController _nameController = TextEditingController();
   Color _selectedColor = Colors.red;
-  final uuid = Uuid();
+  String? _errorMessage;
 
   void _createSection() {
     final name = _nameController.text.trim();
-    if (name.isNotEmpty) {
-      final section = Section(
-        id: uuid.v4(),
-        name: name,
-        color: _selectedColor,
-      );
-      widget.onSectionCreated(section);
+
+    if (name.isEmpty) {
+      setState(() {
+        _errorMessage = "Please enter a section name.";
+      });
+      if (widget.onError != null) {
+        widget.onError!(_errorMessage!);
+      }
+      return;
     }
+
+    final newSection = Section(
+      id: Uuid().v4(),
+      name: name,
+      color: _selectedColor,
+      isFixed: false,
+      tasks: [],  
+    );
+
+    widget.onSectionCreated(newSection);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 
   @override
@@ -43,20 +68,20 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
           ),
           const SizedBox(height: 16),
           ColorPicker(
-              color: _selectedColor,
-              onColorChanged: (color) => setState(() => _selectedColor = color),
-              pickersEnabled: const {
-                ColorPickerType.wheel: true,
-                ColorPickerType.primary: false,
-                ColorPickerType.accent: false,
-              },
-              enableTonalPalette: false,
-              enableShadesSelection: false,
-              showColorCode: false,
-              wheelDiameter: 220,
-              wheelWidth: 40,
-              wheelSquareBorderRadius: 50,
-            ),
+            color: _selectedColor,
+            onColorChanged: (color) => setState(() => _selectedColor = color),
+            pickersEnabled: const {
+              ColorPickerType.wheel: true,
+              ColorPickerType.primary: false,
+              ColorPickerType.accent: false,
+            },
+            enableTonalPalette: false,
+            enableShadesSelection: false,
+            showColorCode: false,
+            wheelDiameter: 220,
+            wheelWidth: 40,
+            wheelSquareBorderRadius: 50,
+          ),
           const SizedBox(height: 24),
           TextField(
             controller: _nameController,
@@ -67,7 +92,16 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
                 child: CircleAvatar(backgroundColor: _selectedColor, radius: 12),
               ),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              errorText: widget.errorText ?? _errorMessage,
             ),
+            onChanged: (_) {
+              if (_errorMessage != null) {
+                setState(() => _errorMessage = null);
+              }
+              if (widget.onError != null) {
+                widget.onError!('');
+              }
+            },
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -83,7 +117,7 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
               ),
               child: const Text("Create", style: TextStyle(color: Colors.white)),
             ),
-          )
+          ),
         ],
       ),
     );

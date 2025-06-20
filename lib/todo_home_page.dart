@@ -22,7 +22,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   bool _allExpanded = false;
   String currentFilter = 'Color';
 
-   @override
+  @override
   void initState() {
     super.initState();
     sectionBox = Hive.box('sections');
@@ -32,7 +32,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
     final rawList = sectionBox.get('list');
     if (rawList == null || rawList is! List) return [];
 
-    return rawList.whereType<Map>().map((e) {
+    final sections = rawList.whereType<Map>().map((e) {
       final map = Map<String, dynamic>.from(e as Map<dynamic, dynamic>);
       return Section(
         id: map['id'] ?? const Uuid().v4(),
@@ -40,10 +40,21 @@ class _TodoHomePageState extends State<TodoHomePage> {
         color: Color(map['color'] ?? Colors.grey.value),
         isFixed: map['isFixed'] ?? false,
         tasks: List<Map<String, dynamic>>.from(
-          (map['tasks'] ?? []).map((task) => Map<String, dynamic>.from(task as Map)).toList(),
+          (map['tasks'] ?? [])
+              .map((task) => Map<String, dynamic>.from(task as Map))
+              .toList(),
         ),
       );
     }).toList();
+
+    // Ensure 'Completed' section exists only if its isFixed == true
+    final completedIndex = sections.indexWhere((s) => s.name == 'Completed');
+
+    if (completedIndex != -1 && !sections[completedIndex].isFixed) {
+      sections.removeAt(completedIndex); // remove non-fixed 'Completed' section
+    }
+
+    return sections;
   }
 
   void toggleExpand(String id) {
@@ -55,7 +66,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   void expandAll(List<Section> sections) {
     setState(() {
       _allExpanded = !_allExpanded;
-      
+
       if (currentFilter == 'Color') {
         // Expand/collapse section groups
         for (var section in sections) {
@@ -66,7 +77,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         final tomorrow = today.add(const Duration(days: 1));
-        
+
         // Get all date categories (similar to _buildTaskGroups logic)
         final dateCategories = <String>{};
         for (final section in sections) {
@@ -74,23 +85,25 @@ class _TodoHomePageState extends State<TodoHomePage> {
             if (task['dueDate'] != null) {
               final dueDate = DateTime.parse(task['dueDate']);
               if (dueDate.isBefore(today)) continue;
-              
+
               String category;
               if (dueDate.isBefore(tomorrow)) {
                 category = 'Today';
-              } else if (dueDate.isBefore(tomorrow.add(const Duration(days: 1)))) {
+              } else if (dueDate
+                  .isBefore(tomorrow.add(const Duration(days: 1)))) {
                 category = 'Tomorrow';
-              } else if (dueDate.year == now.year && dueDate.month == now.month) {
+              } else if (dueDate.year == now.year &&
+                  dueDate.month == now.month) {
                 category = DateFormat('d MMMM y').format(dueDate);
               } else {
                 category = DateFormat('MMMM y').format(dueDate);
               }
-              
+
               dateCategories.add(category);
             }
           }
         }
-        
+
         // Set expanded state for all date groups
         for (final category in dateCategories) {
           _expanded['date_$category'] = _allExpanded;
@@ -101,7 +114,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   void _navigateToAddTask() async {
     final sections = getAllSections();
-    
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -120,7 +133,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
       if (index != -1) {
         sections[index].tasks.add({
           'id': const Uuid().v4(),
-          'text': newTask, 
+          'text': newTask,
           'dueDate': dueDate,
           'completed': false,
         });
@@ -130,99 +143,240 @@ class _TodoHomePageState extends State<TodoHomePage> {
     }
   }
 
-  List<Widget> _buildTaskGroups(List<Section> sections) {
-  if (currentFilter == 'Color') {
-    return [
-      for (int i = 0; i < sections.length; i++)
-        TodoGroup(
-          id: sections[i].id,
-          title: sections[i].name,
-          color: sections[i].color,
-          items: sections[i].tasks,
-          showItems: _expanded[sections[i].id] ?? true,
-          trailingCount: sections[i].tasks.length,
-          onToggle: () => toggleExpand(sections[i].id),
-          isLast: i == sections.length - 1,
+  void _deleteTask(String sectionId, String taskId) {
+    final sections = getAllSections();
+    final sectionIndex = sections.indexWhere((s) => s.id == sectionId);
+
+    if (sectionIndex != -1) {
+      setState(() {
+        sections[sectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
+        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      });
+    }
+  }
+
+  void _editTask(String sectionId, String taskId, String currentText,
+      DateTime currentDate) async {
+    final sections = getAllSections();
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddTaskPage(
+          sections: sections,
+          existingTask: currentText,
+          existingDate: currentDate,
+          existingSectionId: sectionId,
+          onDelete: () => _deleteTask(sectionId, taskId),
         ),
-    ];
-  } else {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    
-    final tasksByDate = <String, List<Map<String, dynamic>>>{};
-    final sectionColors = <String, Color>{}; // Store color for each task
-    
-    for (final section in sections) {
-      for (final task in section.tasks) {
-        if (task['dueDate'] != null) {
-          final dueDate = DateTime.parse(task['dueDate']);
-          if (dueDate.isBefore(today)) continue;
-          
-          String category;
-          if (dueDate.isBefore(tomorrow)) {
-            category = 'Today';
-          } else if (dueDate.isBefore(tomorrow.add(const Duration(days: 1)))) {
-            category = 'Tomorrow';
-          } else if (dueDate.year == now.year && dueDate.month == now.month) {
-            category = DateFormat('d MMMM y').format(dueDate);
-          } else {
-            category = DateFormat('MMMM y').format(dueDate);
-          }
-          
-          tasksByDate.putIfAbsent(category, () => []);
-          // Add the section color to the task map
-          final taskWithColor = Map<String, dynamic>.from(task);
-          taskWithColor['sectionColor'] = section.color.value;
-          tasksByDate[category]!.add(taskWithColor);
-        }
+      ),
+    );
+
+    if (result != null && result is Map<String, dynamic>) {
+      final selectedSectionId = result['sectionId'];
+      final newTask = result['task'];
+      final dueDate = result['dueDate'];
+
+      // Find and remove the old task
+      final oldSectionIndex = sections.indexWhere((s) => s.id == sectionId);
+      if (oldSectionIndex != -1) {
+        sections[oldSectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
+      }
+
+      // Add to new section (or same section if not changed)
+      final newSectionIndex = sections.indexWhere((s) => s.id == selectedSectionId);
+      if (newSectionIndex != -1) {
+        sections[newSectionIndex].tasks.add({
+          'id': taskId, // Keep the same ID
+          'text': newTask,
+          'dueDate': dueDate,
+          'completed': false,
+        });
+        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+        setState(() {});
       }
     }
-    
-    final sortedCategories = tasksByDate.keys.toList()
-      ..sort((a, b) {
-        if (a == 'Today') return -1;
-        if (b == 'Today') return 1;
-        if (a == 'Tomorrow') return -1;
-        if (b == 'Tomorrow') return 1;
-        
-        try {
-          final dateA = DateFormat('d MMMM y').parse(a);
-          final dateB = DateFormat('d MMMM y').parse(b);
-          return dateA.compareTo(dateB);
-        } catch (e) {
-          try {
-            final dateA = DateFormat('MMMM y').parse(a);
-            final dateB = DateFormat('MMMM y').parse(b);
-            return dateA.compareTo(dateB);
-          } catch (e) {
-            return a.compareTo(b);
+  }
+
+  Section _getOrCreateCompletedSection(List<Section> sections) {
+    try {
+      return sections.firstWhere((section) => section.name == 'Completed');
+    } catch (e) {
+      // If 'Completed' section does not exist, create it
+      final completedSection = Section(
+        id: const Uuid().v4(),
+        name: 'Completed',
+        color: Colors.grey, // You can choose a different color
+        isFixed: true, // Make it a fixed section
+        tasks: [],
+      );
+      sections.add(completedSection);
+      sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      return completedSection;
+    }
+  }
+
+  void _toggleTaskCompletion(String sectionId, String taskId, bool isCompleted) {
+    final sections = getAllSections();
+    final currentSectionIndex = sections.indexWhere((s) => s.id == sectionId);
+
+    if (currentSectionIndex != -1) {
+      final taskIndex = sections[currentSectionIndex].tasks.indexWhere(
+            (task) => task['id'] == taskId,
+          );
+
+      if (taskIndex != -1) {
+        final taskToMove =
+            Map<String, dynamic>.from(sections[currentSectionIndex].tasks[taskIndex]);
+
+        setState(() {
+          // Update the completed status of the task
+          taskToMove['completed'] = isCompleted;
+
+          if (isCompleted) {
+            // Remove from current section
+            sections[currentSectionIndex].tasks.removeAt(taskIndex);
+
+            // Add to 'Completed' section
+            final completedSection = _getOrCreateCompletedSection(sections);
+            if (!completedSection.tasks.any((task) => task['id'] == taskToMove['id'])) {
+              completedSection.tasks.add(taskToMove);
+            }
+          } else {
+            // If uncompleted, move back to its original section (or handle as per your logic)
+            // For simplicity, we'll keep it in the "Completed" section but unmark it
+            // if it was previously there. If you want to move it back to the original
+            // section, you'd need to store the original section ID in the task data.
+            // For now, we'll just update its status in the "Completed" section if it's there.
+            final completedSectionIndex = sections.indexWhere((s) => s.name == 'Completed');
+            if (completedSectionIndex != -1) {
+              final completedTaskIndex = sections[completedSectionIndex].tasks.indexWhere((task) => task['id'] == taskId);
+              if (completedTaskIndex != -1) {
+                sections[completedSectionIndex].tasks[completedTaskIndex]['completed'] = isCompleted;
+              }
+            } else {
+                 // If not in completed section, just update its status in its current section
+                sections[currentSectionIndex].tasks[taskIndex]['completed'] = isCompleted;
+            }
+          }
+          sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+        });
+      }
+    }
+  }
+
+  List<Widget> _buildTaskGroups(List<Section> sections) {
+    if (currentFilter == 'Color') {
+      return [
+        for (int i = 0; i < sections.length; i++)
+          TodoGroup(
+            id: sections[i].id,
+            title: sections[i].name,
+            color: sections[i].color,
+            items: sections[i].tasks,
+            showItems: _expanded[sections[i].id] ?? true,
+            trailingCount: sections[i].tasks.length,
+            onToggle: () => toggleExpand(sections[i].id),
+            isLast: i == sections.length - 1,
+            sectionId: sections[i].id,
+            onDeleteTask: _deleteTask,
+            onEditTask: _editTask,
+            onToggleComplete: (taskId, isCompleted) { // Changed this line
+              _toggleTaskCompletion(sections[i].id, taskId, isCompleted);
+            },
+          ),
+      ];
+    } else {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+
+      final tasksByDate = <String, List<Map<String, dynamic>>>{};
+      // final sectionColors = <String, Color>{}; // This variable is not used
+      // in the current logic, so it can be removed or used as needed.
+
+      for (final section in sections) {
+        for (final task in section.tasks) {
+          if (task['dueDate'] != null) {
+            final dueDate = DateTime.parse(task['dueDate']);
+            if (dueDate.isBefore(today)) continue;
+
+            String category;
+            if (dueDate.isBefore(tomorrow)) {
+              category = 'Today';
+            } else if (dueDate
+                .isBefore(tomorrow.add(const Duration(days: 1)))) {
+              category = 'Tomorrow';
+            } else if (dueDate.year == now.year &&
+                dueDate.month == now.month) {
+              category = DateFormat('d MMMM y').format(dueDate);
+            } else {
+              category = DateFormat('MMMM y').format(dueDate);
+            }
+
+            tasksByDate.putIfAbsent(category, () => []);
+            // Add the section color to the task map
+            final taskWithColor = Map<String, dynamic>.from(task);
+            taskWithColor['sectionColor'] = section.color.value;
+            taskWithColor['sectionId'] = section.id;
+            tasksByDate[category]!.add(taskWithColor);
           }
         }
-      });
-    
-    // Initialize expanded state for date groups if not already set
-    for (final category in sortedCategories) {
-      final groupId = 'date_$category';
-      _expanded.putIfAbsent(groupId, () => true);
+      }
+
+      final sortedCategories = tasksByDate.keys.toList()
+        ..sort((a, b) {
+          if (a == 'Today') return -1;
+          if (b == 'Today') return 1;
+          if (a == 'Tomorrow') return -1;
+          if (b == 'Tomorrow') return 1;
+
+          try {
+            final dateA = DateFormat('d MMMM y').parse(a);
+            final dateB = DateFormat('d MMMM y').parse(b);
+            return dateA.compareTo(dateB);
+          } catch (e) {
+            try {
+              final dateA = DateFormat('MMMM y').parse(a);
+              final dateB = DateFormat('MMMM y').parse(b);
+              return dateA.compareTo(dateB);
+            } catch (e) {
+              return a.compareTo(b);
+            }
+          }
+        });
+
+      // Initialize expanded state for date groups if not already set
+      for (final category in sortedCategories) {
+        final groupId = 'date_$category';
+        _expanded.putIfAbsent(groupId, () => true);
+      }
+
+      return [
+        for (int i = 0; i < sortedCategories.length; i++)
+          TodoGroup(
+            id: 'date_${sortedCategories[i]}',
+            title: sortedCategories[i],
+            color: Colors.white, // Use white background for date groups
+            items: tasksByDate[sortedCategories[i]]!,
+            showItems: _expanded['date_${sortedCategories[i]}'] ?? true,
+            trailingCount: tasksByDate[sortedCategories[i]]!.length,
+            onToggle: () => toggleExpand('date_${sortedCategories[i]}'),
+            isLast: i == sortedCategories.length - 1,
+            isDateGroup: true,
+            sectionId: '', // Section ID is not directly applicable for date groups, but individual tasks within will have it.
+            onDeleteTask: _deleteTask,
+            onEditTask: _editTask,
+            onToggleComplete: (taskId, isCompleted) {
+              final task = tasksByDate[sortedCategories[i]]!.firstWhere(
+                (element) => element['id'] == taskId,
+              );
+              _toggleTaskCompletion(task['sectionId'], taskId, isCompleted);
+            },
+          ),
+      ];
     }
-    
-    return [
-      for (int i = 0; i < sortedCategories.length; i++)
-        TodoGroup(
-          id: 'date_${sortedCategories[i]}',
-          title: sortedCategories[i],
-          color: Colors.white, // Use white background for date groups
-          items: tasksByDate[sortedCategories[i]]!,
-          showItems: _expanded['date_${sortedCategories[i]}'] ?? true,
-          trailingCount: tasksByDate[sortedCategories[i]]!.length,
-          onToggle: () => toggleExpand('date_${sortedCategories[i]}'),
-          isLast: i == sortedCategories.length - 1,
-          isDateGroup: true,
-        ),
-    ];
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -230,56 +384,55 @@ class _TodoHomePageState extends State<TodoHomePage> {
       valueListenable: sectionBox.listenable(),
       builder: (context, Box box, _) {
         final sections = getAllSections();
-        bool shouldShowEmptyState = sections.length == 1 && 
-                                sections[0].name == "Complete" || sections.every((section) => section.tasks.isEmpty);
+        bool shouldShowEmptyState = sections.length == 1 &&
+            sections[0].name == "Completed" ||
+            sections.every((section) => section.tasks.isEmpty);
         if (shouldShowEmptyState) {
-        return Scaffold(
-          backgroundColor: AppColors.white,
-          body: SafeArea(
-            child: Column(
-              children: [
-                const _Header(),
-                Expanded(  // This will push content to center
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.asset(
-                        'assets/images/notasks.png',
-                        width: 154,
-                        height: 154,
+          return Scaffold(
+            backgroundColor: AppColors.white,
+            body: SafeArea(
+              child: Column(
+                children: [
+                  const _Header(),
+                  Expanded(
+                    // This will push content to center
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/notasks.png',
+                            width: 154,
+                            height: 154,
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'No Tasks Created Yet',
+                            style: AppTextStyles.header.copyWith(
+                              color: Colors.black,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            'Start adding tasks here to list them.',
+                            style: AppTextStyles.taskItem.copyWith(
+                              color: Colors.grey.shade600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 20), 
-                      Text(
-                  'No Tasks Created Yet',
-                  style: AppTextStyles.header.copyWith(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  'Start adding tasks here to list them.',
-                  style: AppTextStyles.taskItem.copyWith(
-                    color: Colors.grey.shade600,
-                    fontSize: 14,
-                  ),
-                ),
-                    ],
-                  ),
-                ),
+                  _AddTaskButton(onPressed: _navigateToAddTask),
+                ],
               ),
-                
-
-                _AddTaskButton(onPressed: _navigateToAddTask),
-                
-              ],
             ),
-          ),
-        );
-      }
-      final groups = _buildTaskGroups(sections);
+          );
+        }
+        final groups = _buildTaskGroups(sections);
 
         return Scaffold(
           backgroundColor: AppColors.white,
@@ -319,7 +472,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
 class OverlappingTaskList extends StatelessWidget {
   final List<Widget> taskGroups;
-  const OverlappingTaskList({Key? key, required this.taskGroups}) : super(key: key);
+  const OverlappingTaskList({Key? key, required this.taskGroups})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -345,6 +499,11 @@ class TodoGroup extends StatelessWidget {
   final VoidCallback? onToggle;
   final bool isLast;
   final bool isDateGroup;
+  final String sectionId; // Add section ID
+  final Function(String, String) onDeleteTask; // Add delete callback
+  final Function(String, String, String, DateTime) onEditTask;
+  final Function(String taskId, bool isCompleted)
+      onToggleComplete; // Modified type
 
   const TodoGroup({
     Key? key,
@@ -357,6 +516,10 @@ class TodoGroup extends StatelessWidget {
     this.onToggle,
     this.isLast = false,
     this.isDateGroup = false,
+    required this.sectionId,
+    required this.onDeleteTask,
+    required this.onEditTask,
+    required this.onToggleComplete,
   }) : super(key: key);
 
   @override
@@ -384,16 +547,16 @@ class TodoGroup extends StatelessWidget {
               title: Text(
                 title,
                 style: isDateGroup
-                  ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
-                  : AppTextStyles.groupTitle,
+                    ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
+                    : AppTextStyles.groupTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: Text(
                 '$count',
                 style: isDateGroup
-                  ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
-                  : AppTextStyles.groupTitle,
+                    ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
+                    : AppTextStyles.groupTitle,
               ),
             ),
           ),
@@ -405,9 +568,28 @@ class TodoGroup extends StatelessWidget {
                   text: task['text'] ?? '',
                   isDateGroup: isDateGroup,
                   dueDate: task['dueDate'],
-                  taskColor: task['sectionColor'] != null 
-                  ? Color(task['sectionColor']) 
-                  : null, 
+                  taskColor: task['sectionColor'] != null
+                      ? Color(task['sectionColor'])
+                      : null,
+                  taskId: task['id'] ?? '',
+                  sectionId: task['sectionId'] ?? sectionId, // Use task's sectionId if available, else TodoGroup's
+                  onDelete: () => onDeleteTask(
+                      task['sectionId'] ?? sectionId, task['id'] ?? ''),
+                  onEdit: () {
+                    final dueDate = task['dueDate'] != null
+                        ? DateTime.parse(task['dueDate'])
+                        : DateTime.now();
+                    onEditTask(
+                      task['sectionId'] ?? sectionId,
+                      task['id'] ?? '',
+                      task['text'] ?? '',
+                      dueDate,
+                    );
+                  },
+                  onToggleComplete: (isCompleted) {
+                    onToggleComplete(task['id'], isCompleted); // Pass task ID here
+                  },
+                  completed: task['completed'] ?? false,
                 ),
               );
             }).toList(),
@@ -422,6 +604,12 @@ class _TodoItem extends StatefulWidget {
   final bool isDateGroup;
   final String? dueDate;
   final Color? taskColor;
+  final String taskId; // Add task ID
+  final String sectionId; // Add section ID
+  final VoidCallback onDelete; // Add delete callback
+  final VoidCallback onEdit; // Add edit callback
+  final ValueChanged<bool> onToggleComplete;
+  final bool completed;
 
   const _TodoItem({
     Key? key,
@@ -429,6 +617,12 @@ class _TodoItem extends StatefulWidget {
     this.isDateGroup = false,
     this.dueDate,
     this.taskColor,
+    required this.taskId,
+    required this.sectionId,
+    required this.onDelete,
+    required this.onEdit,
+    required this.onToggleComplete,
+    required this.completed,
   }) : super(key: key);
 
   @override
@@ -436,11 +630,16 @@ class _TodoItem extends StatefulWidget {
 }
 
 class _TodoItemState extends State<_TodoItem> {
-  bool isChecked = false;
+  var isChecked = false;
+  @override
+  void initState() {
+    super.initState();
+    isChecked = widget.completed;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final itemHeight = widget.dueDate != null ? 64.0 : 48.0;
+    final itemHeight = widget.dueDate != null ? 36.0 : 48.0;
     final circleSize = 24.0;
 
     return Padding(
@@ -448,7 +647,12 @@ class _TodoItemState extends State<_TodoItem> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
+          GestureDetector(
+          onTap: () {
+              // Call the edit function when the task is tapped
+              widget.onEdit();
+            },
+            child:Container(
             height: itemHeight,
             decoration: BoxDecoration(
               color: widget.isDateGroup
@@ -461,24 +665,17 @@ class _TodoItemState extends State<_TodoItem> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // ✅ Checkbox with toggle logic
-                CustomCheckbox(
-                isChecked: isChecked,
-                isDateGroup: widget.isDateGroup,
-
-                onTap: () {
-                  setState(() {
-                    isChecked = !isChecked;
-                  });
-                },
-              ),
-
-
-
-
-
+                  CustomCheckbox(
+                    isChecked: isChecked,
+                    isDateGroup: widget.isDateGroup,
+                    onTap: () {
+                      setState(() {
+                        isChecked = !isChecked;
+                      });
+                      widget.onToggleComplete(isChecked);
+                    },
+                  ),
                   const SizedBox(width: 12),
-
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -493,28 +690,16 @@ class _TodoItemState extends State<_TodoItem> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        // if (widget.dueDate != null)
-                        //   Padding(
-                        //     padding: const EdgeInsets.only(top: 2),
-                        //     child: Text(
-                        //       _formatDueDate(widget.dueDate!),
-                        //       style: AppTextStyles.taskItem.copyWith(
-                        //         color: widget.isDateGroup
-                        //             ? Colors.grey.shade600
-                        //             : AppColors.white.withOpacity(0.8),
-                        //         fontSize: 10,
-                        //       ),
-                        //     ),
-                        //   ),
                       ],
                     ),
                   ),
+                  // Add edit and delete buttons
+                  
                 ],
               ),
             ),
           ),
-
-          // Left color marker
+          ),
           if (widget.isDateGroup && widget.taskColor != null)
             Positioned(
               left: 0,
@@ -535,13 +720,7 @@ class _TodoItemState extends State<_TodoItem> {
       ),
     );
   }
-
-  String _formatDueDate(String dateString) {
-    final date = DateTime.parse(dateString);
-    return DateFormat('MMM d, h:mm a').format(date);
-  }
 }
-
 
 class _Header extends StatelessWidget {
   const _Header({Key? key}) : super(key: key);

@@ -46,6 +46,7 @@ void main() async {
   //   ]);
   // }
   await Hive.initFlutter();
+  //await Hive.deleteBoxFromDisk('sections');
   await Hive.openBox('sections');
 
   runApp(const MaterialApp(

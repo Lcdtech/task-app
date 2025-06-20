@@ -6,7 +6,6 @@ import 'package:uuid/uuid.dart';
 import 'styles.dart';
 import '../models/section.dart';
 import 'create_section_page.dart';
-import 'package:flutter/cupertino.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -21,13 +20,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Color _currentColor = Colors.red;
   late Box sectionBox;
   String currentFilter = 'Hide';
-
-  static const double itemHeight = 75;
-  static const double overlap = 15;
-
   final uuid = Uuid();
-  int? draggingIndex;
-  int? targetIndex;
 
   @override
   void initState() {
@@ -44,15 +37,31 @@ class _SettingsPageState extends State<SettingsPage> {
         .map((e) => Section.fromMap(Map<String, dynamic>.from(e)))
         .toList();
 
-    if (sections.where((s) => s.isFixed).isEmpty) {
+    // Ensure the "Complete" section is always present and at the end
+    if (sections.where((s) => s.name == 'Completed').isEmpty) {
       sections.add(Section(
         id: uuid.v4(),
-        name: 'Complete',
+        name: 'Completed',
         color: AppColors.complete,
         isFixed: true,
       ));
       _saveSections();
+    } else {
+      // Ensure 'Complete' is always the last fixed item if it exists
+      final completeSectionIndex =
+          sections.indexWhere((s) => s.name == 'Completed');
+      if (completeSectionIndex != -1 &&
+          completeSectionIndex != sections.length - 1) {
+        final completeSection = sections.removeAt(completeSectionIndex);
+        sections.add(completeSection);
+        _saveSections();
+      }
     }
+
+    final completedSection = sections.firstWhere(
+      (s) => s.name == 'Completed',
+    );
+    currentFilter = completedSection.isFixed ? 'Show' : 'Hide';
 
     setState(() {});
   }
@@ -61,45 +70,57 @@ class _SettingsPageState extends State<SettingsPage> {
     sectionBox.put('list', sections.map((s) => s.toMap()).toList());
   }
 
-  void _showCreateSectionModal() {
+ void _showCreateSectionModal() {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (context) => Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: CreateSectionModal(
-        onSectionCreated: (newSection) {
-          final exists = sections.any((s) =>
-              s.name.trim().toLowerCase() == newSection.name.trim().toLowerCase());
-
-          if (exists) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('A section with this name already exists.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            return;
-          }
-
-          setState(() {
-            sections.insert(sections.length - 1, newSection);
-            _saveSections();
-          });
-
-          Navigator.of(context).pop(); // Close modal
+    builder: (modalContext) {
+      String? errorText;
+      
+      return StatefulBuilder(
+        builder: (context, modalSetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: CreateSectionModal(
+              errorText: errorText,
+              onError: (msg) => modalSetState(() => errorText = msg),
+              onSectionCreated: (newSection) {
+                final exists = sections.any((s) => 
+                    s.name.trim().toLowerCase() == 
+                    newSection.name.trim().toLowerCase());
+                
+                if (exists) {
+                  modalSetState(() {
+                    errorText = "Section with this name already exists";
+                  });
+                  return;
+                }
+                
+                // Only close the modal if section is valid
+                Navigator.of(modalContext).pop();
+                
+                // Update main state
+                if (mounted) {
+                  setState(() {
+                    sections.insert(sections.length - 1, newSection);
+                    _saveSections();
+                  });
+                }
+              },
+            ),
+          );
         },
-      ),
-    ),
-    isDismissible: true,
+      );
+    },
   );
 }
-
+  
+  
 
   void _deleteSection(int index) {
     if (sections[index].isFixed) return;
@@ -110,67 +131,51 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  double _getTileTop(int index) {
-    
-    double baseTop =  index * (itemHeight - overlap);
+  void _onReorder(int oldIndex, int newIndex) {
+    // Get only the reorderable sections
+    final reorderableSections =
+        sections.where((s) => s.name != "Completed").toList();
 
-    if (draggingIndex == null || targetIndex == null || draggingIndex == targetIndex) {
-      return baseTop;
-    }
+    // Adjust indices for the reorderable list
+    final actualOldIndex = sections.indexOf(reorderableSections[oldIndex]);
 
-    if ( index == draggingIndex) {
-      return baseTop;
-    }
-
-    if (index > draggingIndex! && index <= targetIndex!) {
-      return (index - 1) * (itemHeight - overlap);
-    } else if (index < draggingIndex! && index >= targetIndex!) {
-      return (index + 1) * (itemHeight - overlap);
-    }
-
-    return baseTop;
-  }
-
-  // New method to move a section up
-  void _moveSectionUp(int index) {
-    if (index > 0 && !sections[index].isFixed) {
-      final targetIndex = index - 1;
-      if (!sections[targetIndex].isFixed) { // Only swap if the target is not fixed
-        setState(() {
-          final section = sections.removeAt(index);
-          sections.insert(targetIndex, section);
-          _saveSections();
-        });
+    // Calculate the actual new index in the full list
+    int actualNewIndex;
+    if (newIndex >= reorderableSections.length) {
+      // Dragged to the end of reorderable sections
+      actualNewIndex = sections.lastIndexWhere((s) => s.name == "Completed");
+    } else {
+      actualNewIndex = sections.indexOf(reorderableSections[newIndex]);
+      if (oldIndex < newIndex) {
+        // If moving down, the target index shifts by one less because an item is removed before insertion
+        actualNewIndex -= 1;
       }
     }
-  }
 
-  // New method to move a section down
-  void _moveSectionDown(int index) {
-    if (index < sections.length - 1 && !sections[index].isFixed) {
-      final targetIndex = index + 1;
-      if (!sections[targetIndex].isFixed) { // Only swap if the target is not fixed
-        setState(() {
-          final section = sections.removeAt(index);
-          sections.insert(targetIndex, section);
-          _saveSections();
-        });
-      }
-    }
+    setState(() {
+      final Section section = sections.removeAt(actualOldIndex);
+      sections.insert(actualNewIndex, section);
+      _saveSections();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-     bool shouldShowEmptyState = sections.length == 1 && 
-                                sections[0].name == "Complete";
+    // Filter out the "Complete" section for display in the ReorderableListView
+    final displaySections =
+        sections.where((s) => s.name != "Completed").toList();
+
+    bool shouldShowEmptyState =
+        displaySections.isEmpty; // Check if there are no user-created sections
+
     if (shouldShowEmptyState) {
-        return Scaffold(
-          appBar: AppBar(title: const Text('Settings')),
-          backgroundColor: AppColors.white,
-          body: SafeArea(
-            child: Column(
-              children: [
-                Align(
+      return Scaffold(
+        appBar: AppBar(title: const Text('Settings')),
+        backgroundColor: AppColors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -184,56 +189,54 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ),
-                const SizedBox(height: 32),
-                 Image.asset(
-                        'assets/images/notasks.png',
-                        width: 154,
-                        height: 154,
-                      ),
-                      const SizedBox(height: 20), 
-                      Text(
-                  'No Categories Created Yet',
-                  style: AppTextStyles.header.copyWith(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                
-
-                Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.black, width: 0.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(32),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: _showCreateSectionModal,
-                icon: const Icon(Icons.add, color: Colors.black),
-                label: const Text(
-                  'Create Section',
-                  style: TextStyle(color: Colors.black),
+              const SizedBox(height: 32),
+              Image.asset(
+                'assets/images/notasks.png',
+                width: 154,
+                height: 154,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'No Categories Created Yet',
+                style: AppTextStyles.header.copyWith(
+                  color: Colors.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.black, width: 0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: _showCreateSectionModal,
+                    icon: const Icon(Icons.add, color: Colors.black),
+                    label: const Text(
+                      'Create Section',
+                      style: TextStyle(color: Colors.black),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-                
-              ],
-            ),
-          ),
-        );
-      }
-      
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Column(
+      body: SingleChildScrollView(
+      child: Column(
         children: [
           Align(
             alignment: Alignment.centerLeft,
@@ -249,36 +252,31 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-          Padding(
-              padding: const EdgeInsets.all(16),
-              child: SingleChildScrollView(
-                child: SizedBox(
-                  height: sections.length * (itemHeight - overlap) + 16, 
-                  child: Stack(
-                    children: List.generate(sections.length, (index) {
-                      final section = sections[index];
-                      final isDragging = index == draggingIndex;
-
-                      return AnimatedPositioned(
-                        key: ValueKey(section.id),
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        top: _getTileTop(index),
-                        left: 0,
-                        right: 0,
-                        child: _buildTile(
-                          index,
-                          section,
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ),
+          // Height calculated based on `displaySections`
+          SizedBox(
+            height: (48.0 * displaySections.length) +
+                (displaySections.isNotEmpty ? 8.0 * 2 : 0),
+            child: ReorderableListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: displaySections.length,
+              itemBuilder: (BuildContext context, int index) {
+                final section = displaySections[index]; // Use displaySections
+                return _buildTile(index, section);
+              },
+              onReorder: _onReorder,
+              buildDefaultDragHandles: false,
+              proxyDecorator:
+                  (Widget child, int index, Animation<double> animation) {
+                return Material(
+                  elevation: 0,
+                  color: Colors.transparent,
+                  child: child,
+                );
+              },
             ),
-          
+          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: SizedBox(
               width: double.infinity,
               height: 52,
@@ -299,89 +297,86 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-          const SizedBox(height: 18),
           Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'Additional Settings',
-                   style: AppTextStyles.taskItem.copyWith(
-                    color: Colors.grey.shade600,
-                    fontSize: 16,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                      left: 16, right: 16, top: 16, bottom: 8),
+                  child: Text(
+                    'Additional Settings',
+                    style: AppTextStyles.taskItem.copyWith(
+                      color: Colors.grey.shade600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-            ),
-            
+              _FiltersBar(
+                selectedFilters: {currentFilter},
+                onFilterToggle: (filter) {
+                  setState(() {
+                    currentFilter = filter; // update live
 
-            _FiltersBar(
-                    selectedFilters: {currentFilter},
-                    onFilterToggle: (filter) {
-                      setState(() {
-                        currentFilter = filter;
-                      });
-                    },
-                  ),
-
-          ],
-        )
-
+                    final index =
+                        sections.indexWhere((s) => s.name == 'Completed');
+                    if (index != -1) {
+                      final original = sections[index];
+                      sections[index] = Section(
+                        id: original.id,
+                        name: original.name,
+                        color: original.color,
+                        tasks: original.tasks,
+                        isFixed: filter == 'Show',
+                      );
+                      _saveSections();
+                    }
+                  });
+                },
+              ),
+            ],
+          )
         ],
+      ),
       ),
     );
   }
 
   Widget _buildTile(int index, Section section) {
+    // Note: The index here is the index within `displaySections`
+    // but the `ValueKey(section.id)` ensures correct reordering.
     return Material(
+      key: ValueKey(section.id),
       elevation: 4,
       borderRadius: BorderRadius.circular(20),
       color: section.color,
       child: Container(
-        height: section.isFixed ? 59 : 71, // Adjusted height for fixed items for better consistency
-        margin: EdgeInsets.only(bottom: section.isFixed ? 4 : 16),
-        padding: const EdgeInsets.only(left: 0, right: 0, top: 0),
+        height: 48,
+        padding: const EdgeInsets.only(left: 8, right: 0, top: 0),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: ListTile(
-            title: Text(
-              section.name,
-              style: AppTextStyles.groupTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          // Since _buildTile is only called for non-fixed sections now,
+          // the isFixed check inside can be simplified or removed if desired,
+          // but keeping it for clarity if _buildTile were used elsewhere.
+          child: ReorderableDragStartListener(
+            index: index, // This index is correct for the filtered list
+            child: ListTile(
+              title: Text(
+                section.name,
+                style: AppTextStyles.groupTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete, color: Colors.white),
+                onPressed: () =>
+                    _deleteSection(sections.indexOf(section)), // Find actual index in full list
+              ),
+              leading: const Icon(Icons.drag_indicator, color: Colors.white),
             ),
-             leading: section.isFixed
-                ? IconButton(
-                        icon: const Icon(Icons.lock, color: Colors.white), // iOS lock icon
-                        onPressed: (){},
-                      )
-                : IconButton(
-                        icon: const Icon(CupertinoIcons.chevron_up, color: Colors.white), // iOS up arrow
-                        onPressed: index > 0 && !sections[index - 1].isFixed
-                            ? () => _moveSectionUp(index)
-                            : null,
-                      ),
-            trailing: section.isFixed
-                ? const SizedBox.shrink()
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(CupertinoIcons.chevron_down, color: Colors.white), // iOS down arrow
-                        onPressed: index < sections.length - 1 && !sections[index + 1].isFixed && !sections[index].isFixed
-                            ? () => _moveSectionDown(index)
-                            : null,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.white), // iOS delete icon
-                        onPressed: () => _deleteSection(index),
-                      ),
-                    ],
-                  ),
-          
           ),
         ),
       ),
@@ -392,11 +387,11 @@ class _SettingsPageState extends State<SettingsPage> {
 class _FiltersBar extends StatefulWidget {
   final Set<String> selectedFilters;
   final void Function(String) onFilterToggle;
-  
+
   const _FiltersBar({
     Key? key,
-    required this.selectedFilters, 
-    required this.onFilterToggle, 
+    required this.selectedFilters,
+    required this.onFilterToggle,
   }) : super(key: key);
 
   @override
@@ -404,16 +399,14 @@ class _FiltersBar extends StatefulWidget {
 }
 
 class __FiltersBarState extends State<_FiltersBar> {
-  int selectedIndex = 0;
   final List<String> labels = ['Hide', 'Show'];
-final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
+  final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
 
   @override
   Widget build(BuildContext context) {
-      final isSmallScreen = MediaQuery.of(context).size.width < 340;
+    final isSmallScreen = MediaQuery.of(context).size.width < 340;
 
     if (isSmallScreen) {
-      // 👉 Stack vertically on narrow screens
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
@@ -421,17 +414,14 @@ final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
           children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: _buildExpandChip(), // "Expand All" button
+              child: _buildExpandChip(),
             ),
             const SizedBox(height: 16),
-            _buildToggleSegment(), // toggle chips
-            
-            
+            _buildToggleSegment(),
           ],
         ),
       );
     } else {
-      // 👉 Normal horizontal layout for wider screens
       return Padding(
         padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
         child: Row(
@@ -439,14 +429,12 @@ final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
             _buildExpandChip(),
             const Spacer(),
             _buildToggleSegment(),
-            
-            
           ],
         ),
       );
     }
   }
-  
+
   Widget _buildToggleSegment() {
     return Container(
       decoration: BoxDecoration(
@@ -456,11 +444,10 @@ final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
       padding: const EdgeInsets.all(2),
       child: Row(
         children: List.generate(labels.length, (index) {
-          final isSelected = widget.selectedFilters.contains(labels[index]);
+          final label = labels[index];
+          final isSelected = widget.selectedFilters.contains(label);
           return GestureDetector(
-            onTap: () {
-              widget.onFilterToggle(labels[index]);
-            },
+            onTap: () => widget.onFilterToggle(label),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -476,7 +463,7 @@ final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    labels[index],
+                    label,
                     style: AppTextStyles.chipText.copyWith(
                       color: isSelected ? Colors.black : Colors.grey.shade600,
                     ),
@@ -491,17 +478,13 @@ final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
   }
 
   Widget _buildExpandChip() {
-
     return Text(
-                  'Completed List',
-                  style: AppTextStyles.header.copyWith(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                );
+      'Completed List',
+      style: AppTextStyles.header.copyWith(
+        color: Colors.black,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+    );
   }
-
 }
-
-  
