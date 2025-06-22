@@ -17,6 +17,8 @@ class TodoHomePage extends StatefulWidget {
 }
 
 class _TodoHomePageState extends State<TodoHomePage> {
+  int? completedIndex;
+  Section? removedCompletedSection;
   late Box sectionBox;
   final Map<String, bool> _expanded = {};
   bool _allExpanded = false;
@@ -48,10 +50,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
     }).toList();
 
     // Ensure 'Completed' section exists only if its isFixed == true
-    final completedIndex = sections.indexWhere((s) => s.name == 'Completed');
+    completedIndex = sections.indexWhere((s) => s.name == 'Completed');
+    removedCompletedSection = sections[completedIndex!];
 
-    if (completedIndex != -1 && !sections[completedIndex].isFixed) {
-      sections.removeAt(completedIndex); // remove non-fixed 'Completed' section
+    // Remove if not fixed
+    if (completedIndex != -1 && !sections[completedIndex!].isFixed) {
+      sections.removeAt(completedIndex!);
+      completedIndex = null; // reset if removed
     }
 
     return sections;
@@ -113,13 +118,31 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   void _navigateToAddTask() async {
-    final sections = getAllSections();
+    late List<Section>  sections = getAllSections();
 
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AddTaskPage(
           sections: sections,
+          onSectionCreated: (newSection) {
+            final hasCompleted = sections.any((s) => s.name == 'Completed');
+            if (hasCompleted) {
+                setState(() {
+                    sections.insert(sections.length - 1, newSection);
+                     sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                  });
+              } else {
+                setState(() {
+                  sections = [...sections, newSection,removedCompletedSection!];
+                  sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                });
+              }
+          // setState(() {
+          //   sections = [...sections, newSection];
+          //   sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+          // });
+    },
         ),
       ),
     );
@@ -157,7 +180,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   void _editTask(String sectionId, String taskId, String currentText,
       DateTime currentDate) async {
-    final sections = getAllSections();
+    late List<Section> sections = getAllSections();
 
     final result = await Navigator.push(
       context,
@@ -168,6 +191,25 @@ class _TodoHomePageState extends State<TodoHomePage> {
           existingDate: currentDate,
           existingSectionId: sectionId,
           onDelete: () => _deleteTask(sectionId, taskId),
+          onSectionCreated: (newSection) {
+            final hasCompleted = sections.any((s) => s.name == 'Completed');
+            if (hasCompleted) {
+                setState(() {
+                    sections.insert(sections.length - 1, newSection);
+                     sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                  });
+              } else {
+                setState(() {
+                  sections = [...sections, newSection,removedCompletedSection!];
+                  sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                });
+              }
+
+          // setState(() {
+          //   sections = [...sections, newSection];
+          //   sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+          // });
+    },
         ),
       ),
     );
