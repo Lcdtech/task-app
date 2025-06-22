@@ -24,6 +24,7 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
   final TextEditingController _nameController = TextEditingController();
   Color _selectedColor = Colors.red;
   String? _errorMessage;
+  bool _isButtonEnabled = false;
 
   void _createSection() {
     final name = _nameController.text.trim();
@@ -32,9 +33,7 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
       setState(() {
         _errorMessage = "Please enter a section name.";
       });
-      if (widget.onError != null) {
-        widget.onError!(_errorMessage!);
-      }
+      widget.onError?.call(_errorMessage!);
       return;
     }
 
@@ -43,10 +42,23 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
       name: name,
       color: _selectedColor,
       isFixed: false,
-      tasks: [],  
+      tasks: [],
     );
 
     widget.onSectionCreated(newSection);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(() {
+      final isNotEmpty = _nameController.text.trim().isNotEmpty;
+      if (_isButtonEnabled != isNotEmpty) {
+        setState(() {
+          _isButtonEnabled = isNotEmpty;
+        });
+      }
+    });
   }
 
   @override
@@ -63,7 +75,7 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            "Pick Section Color",
+            "Create New Section",
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
@@ -76,46 +88,44 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
               ColorPickerType.accent: false,
             },
             enableTonalPalette: false,
-            enableShadesSelection: false,
+            enableShadesSelection: true,
             showColorCode: false,
             wheelDiameter: 220,
             wheelWidth: 40,
             wheelSquareBorderRadius: 50,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           TextField(
             controller: _nameController,
+            style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Type Section title here...',
-              prefixIcon: Padding(
-                padding: const EdgeInsets.all(12),
-                child: CircleAvatar(backgroundColor: _selectedColor, radius: 12),
-              ),
+              hintStyle: TextStyle(color: Colors.grey[400]),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
               errorText: widget.errorText ?? _errorMessage,
+              filled: true,
+              fillColor: _selectedColor.withOpacity(1),
             ),
             onChanged: (_) {
               if (_errorMessage != null) {
                 setState(() => _errorMessage = null);
               }
-              if (widget.onError != null) {
-                widget.onError!('');
-              }
+              widget.onError?.call('');
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _createSection,
+              onPressed: _isButtonEnabled ? _createSection : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(32),
                 ),
               ),
-              child: const Text("Create", style: TextStyle(color: Colors.white)),
+              child:  Text("Create", style: _isButtonEnabled  ? TextStyle(color: Colors.white) : TextStyle(color: Colors.black)),
             ),
           ),
         ],
@@ -123,3 +133,4 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
     );
   }
 }
+

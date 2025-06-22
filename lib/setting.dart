@@ -346,42 +346,44 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildTile(int index, Section section) {
-    // Note: The index here is the index within `displaySections`
-    // but the `ValueKey(section.id)` ensures correct reordering.
-    return Material(
-      key: ValueKey(section.id),
-      elevation: 4,
-      borderRadius: BorderRadius.circular(20),
-      color: section.color,
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.only(left: 8, right: 0, top: 0),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          // Since _buildTile is only called for non-fixed sections now,
-          // the isFixed check inside can be simplified or removed if desired,
-          // but keeping it for clarity if _buildTile were used elsewhere.
-          child: ReorderableDragStartListener(
-            index: index, // This index is correct for the filtered list
-            child: ListTile(
-              title: Text(
-                section.name,
-                style: AppTextStyles.groupTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+  return Material(
+    key: ValueKey(section.id),
+    elevation: 4,
+    borderRadius: BorderRadius.circular(20),
+    color: section.color,
+    child: Container(
+      height: 48,
+      child: Center(  // This centers everything in the tile
+        child: ReorderableDragStartListener(
+          index: index,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,  // Centers the row contents
+            children: [
+              const SizedBox(width: 16),
+              const Icon(Icons.drag_indicator, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  section.name,
+                  style: AppTextStyles.groupTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  //textAlign: TextAlign.center,  // Centers the text
+                ),
               ),
-              trailing: IconButton(
+              const SizedBox(width: 8),
+              IconButton(
                 icon: const Icon(Icons.delete, color: Colors.white),
-                onPressed: () =>
-                    _deleteSection(sections.indexOf(section)), // Find actual index in full list
+                onPressed: () => _deleteSection(sections.indexOf(section)),
               ),
-              leading: const Icon(Icons.drag_indicator, color: Colors.white),
-            ),
+              const SizedBox(width: 16),
+            ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _FiltersBar extends StatefulWidget {
