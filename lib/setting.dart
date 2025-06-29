@@ -305,7 +305,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (shouldShowEmptyState) {
       return Scaffold(
         //appBar: AppBar(title: const Text('Settings')),
-        //backgroundColor: AppColors.white,
+        backgroundColor: AppColors.white,
         body: SafeArea(
           child: Column(
             children: [
@@ -373,27 +373,30 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 18),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 42,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.black, width: 0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(32),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: _showCreateSectionModal,
-                    icon: const Icon(Icons.add,size:20, color: Colors.black),
-                    label: const Text(
-                      'Create Category',
-                      style: TextStyle(color: Colors.black),
-                    ),
-                  ),
-                ),
-              ),
+  padding: const EdgeInsets.symmetric(horizontal: 12),
+  child: SizedBox(
+    width: double.infinity,
+    height: 42,
+    child: TextButton.icon(
+      style: TextButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        side: const BorderSide(color: Colors.black, width: 0.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(32),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 0),
+      ),
+      onPressed: _showCreateSectionModal,
+      icon: const Icon(Icons.add, size: 20, color: Colors.black),
+      label: const Text(
+        'Create Category',
+        style: TextStyle(color: Colors.black),
+      ),
+    ),
+  ),
+)
+
             ],
           ),
         ),
@@ -402,12 +405,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Scaffold(
       // appBar: AppBar(title: const Text('Settings')),
-      body: SingleChildScrollView(
+      backgroundColor: AppColors.white,
+      body: SafeArea(child: SingleChildScrollView(
       child: Column(
         children: [
-          const SizedBox(height: 24),
+          
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12,vertical:8),
             child: Row(
                 children: [
                  
@@ -477,28 +481,31 @@ class _SettingsPageState extends State<SettingsPage> {
               },
             ),
           ),
+          const SizedBox(height: 12),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.black, width: 0.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(32),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: _showCreateSectionModal,
-                icon: const Icon(Icons.add,size:20, color: Colors.black),
-                label: const Text(
-                  'Create Category',
-                  style: TextStyle(color: Colors.black),
-                ),
-              ),
-            ),
-          ),
+  padding: const EdgeInsets.symmetric(horizontal: 12),
+  child: SizedBox(
+    width: double.infinity,
+    height: 42,
+    child: TextButton.icon(
+      style: TextButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black,
+        side: const BorderSide(color: Colors.black, width: 0.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(32),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 0),
+      ),
+      onPressed: _showCreateSectionModal,
+      icon: const Icon(Icons.add, size: 20, color: Colors.black),
+      label: const Text(
+        'Create Category',
+        style: TextStyle(color: Colors.black),
+      ),
+    ),
+  ),
+),
           Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12,vertical:12),
                   child: Container(
@@ -551,6 +558,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
       ),
+      ),
     );
   }
 
@@ -582,7 +590,11 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.delete, color: Colors.white),
+                icon: const Icon(
+                        CupertinoIcons.delete,
+                        size: 16, // You can adjust the size
+                        color: Colors.white, // Change color as needed
+                      ),
                 onPressed: () => _deleteSection(sections.indexOf(section)),
               ),
               const SizedBox(width: 16),

@@ -10,6 +10,7 @@ import 'setting.dart';
 import 'add_task_page.dart';
 import '../models/section.dart';
 import 'overlapping_task_list.dart';
+import 'package:flutter/cupertino.dart';
 
 class TodoHomePage extends StatefulWidget {
   const TodoHomePage({Key? key}) : super(key: key);
@@ -1073,10 +1074,10 @@ class ColorFilterTaskItem extends StatelessWidget {
                 child: Center(
                   child: IconButton(
                     icon: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                        CupertinoIcons.delete,
+                        size: 16, // You can adjust the size
+                        color: Colors.white, // Change color as needed
+                      ),
                     onPressed: onDelete,
                   ),
                 ),
@@ -1286,7 +1287,10 @@ class _FiltersBar extends StatefulWidget {
 class __FiltersBarState extends State<_FiltersBar> {
   int selectedIndex = 0;
   final List<String> labels = ['Color', 'Due Date'];
-  final List<IconData> icons = [Icons.color_lens_outlined, Icons.date_range_outlined];
+  final List<IconData> icons = [
+    CupertinoIcons.paintbrush, // for "Color"
+    CupertinoIcons.calendar,   // for "Due Date"
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1343,7 +1347,7 @@ class __FiltersBarState extends State<_FiltersBar> {
               ),
               child: Row(
                 children: [
-                  Icon(
+                   Icon(
                     icons[index],
                     size: 16,
                     color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
@@ -1384,11 +1388,11 @@ class __FiltersBarState extends State<_FiltersBar> {
             children: [
               SizedBox(
                 width: 16,
-                child: Image.asset(
-                'assets/images/expand.png',
-                width: 14,
-                height: 14,
-              ),
+                child: Icon(
+                        CupertinoIcons.arrow_up_arrow_down,
+                        size: 16, // You can adjust the size
+                        color: Colors.black, // Change color as needed
+                      ),
               ),
               const SizedBox(width: 4),
               Expanded(

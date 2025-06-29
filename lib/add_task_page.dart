@@ -301,7 +301,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
 
     return Scaffold(
-      body: Container(
+      body:  SafeArea (child:Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
@@ -314,10 +314,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 12,vertical:8),
           child: Column(
             children: [
-              const SizedBox(height: 24),
+              
               if (_sections.isNotEmpty)
               Row(
                 children: [
@@ -355,18 +355,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
                    GestureDetector(
                     onTap: _confirmDelete,
                     child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 0.3),
-                  ),
-                  child:   Image.asset(
-                      'assets/images/Trash.png',
-                      width: 36, // You can adjust size
-                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 0.3),
+                      ),
+                      padding: const EdgeInsets.all(10), // Add some padding to make it more visually balanced
+                      child: const Icon(
+                        CupertinoIcons.delete,
+                        size: 16, // You can adjust the size
+                        color: Colors.white, // Change color as needed
+                      ),
                     ),
-                  
-                  )
-                   ),
+                  ),
                   
                     
                    
@@ -551,6 +551,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
