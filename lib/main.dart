@@ -52,7 +52,7 @@ void main() async {
   //   ]);
   // }
   await Hive.initFlutter();
-  await Hive.deleteBoxFromDisk('sections');
+  //await Hive.deleteBoxFromDisk('sections');
   //await Hive.openBox('sections');
   sectionBox = await Hive.openBox('sections');
    final stored = sectionBox.get('list') ?? [];

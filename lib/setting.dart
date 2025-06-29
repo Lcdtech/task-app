@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'styles.dart';
 import '../models/section.dart';
 import 'create_section_page.dart';
+import 'package:flutter/cupertino.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -96,7 +97,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 
                 if (exists) {
                   modalSetState(() {
-                    errorText = "Section with this name already exists";
+                    errorText = "Category with this name already exists";
                   });
                   return;
                 }
@@ -122,14 +123,147 @@ class _SettingsPageState extends State<SettingsPage> {
   
   
 
-  void _deleteSection(int index) {
-    if (sections[index].isFixed) return;
+  // void _deleteSection(int index) {
+  //   if (sections[index].isFixed) return;
 
-    setState(() {
-      sections.removeAt(index);
-      _saveSections();
-    });
-  }
+  //   setState(() {
+  //     sections.removeAt(index);
+  //     _saveSections();
+  //   });
+  // }
+
+  void _deleteSection(int index) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      padding: const EdgeInsets.only(left: 8,right:8, top: 16,bottom:0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // White Modal Card with content
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            padding: const EdgeInsets.only(left: 0,right:0, top: 0,bottom:0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon
+                Image.asset(
+                            'assets/images/delete.png',
+                            width: 154,
+                            height: 154,
+                          ),
+
+                
+
+                // Title
+                const Text(
+                  'Delete this Category?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Subtitle
+                const Padding(
+                padding: EdgeInsets.symmetric(horizontal:20), // You can adjust this value
+                child: Text(
+                  "Once deleted, you'll no longer see this category & it's tasks",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+                const SizedBox(height: 24),
+
+              
+               // Yes, Delete Button (flat with black top border)
+              SizedBox(
+                width: double.infinity,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Colors.black12, width: 1), // ✅ thin top border
+                    ),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical:10),
+                  child: TextButton(
+                    onPressed: () {
+                       if (sections[index].isFixed) return;
+
+                        setState(() {
+                          sections.removeAt(index);
+                          _saveSections();
+                        });
+                       Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      foregroundColor: Colors.red,
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                    child: const Text('Yes, Delete'),
+                  ),
+                ),
+              ),
+              
+
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Cancel button below with transparent background between
+                    SizedBox(
+            width: double.infinity,
+            child: Material(
+              color: Colors.white, // ✅ Force background color here
+              borderRadius: BorderRadius.circular(12),
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  side: BorderSide(color: Colors.grey[300]!),
+                ),
+                child: const Text(
+                  'No, Cancel',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+
+
+          const SizedBox(height: 8), // Space from bottom
+        ],
+      ),
+    ),
+  );
+}
 
   void _onReorder(int oldIndex, int newIndex) {
     // Get only the reorderable sections
@@ -170,26 +304,59 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (shouldShowEmptyState) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Settings')),
-        backgroundColor: AppColors.white,
+        //appBar: AppBar(title: const Text('Settings')),
+        //backgroundColor: AppColors.white,
         body: SafeArea(
           child: Column(
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Categories',
-                    style: AppTextStyles.header.copyWith(
+              Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12,vertical:12),
+            child: Row(
+                children: [
+                 
+                  Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black, width: 0.3),
+                  ),
+                  child: IconButton(
+                        //  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          icon: const Icon(CupertinoIcons.back, color: Colors.black), 
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Setting',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w400,
                       color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 32),
+                  const Spacer(),
+                 
+                    
+                   
+                ],
+              )
+
+          ),
+              // Align(
+              //   alignment: Alignment.centerLeft,
+              //   child: Padding(
+              //     padding: const EdgeInsets.symmetric(horizontal: 16),
+              //     child: Text(
+              //       'Categories',
+              //       style: AppTextStyles.header.copyWith(
+              //         color: Colors.black,
+              //         fontSize: 16,
+              //         fontWeight: FontWeight.w600,
+              //       ),
+              //     ),
+              //   ),
+              // ),
+              const SizedBox(height: 46),
               Image.asset(
                 'assets/images/notasks.png',
                 width: 154,
@@ -206,10 +373,10 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 18),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 42,
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.black, width: 0.5),
@@ -219,9 +386,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: _showCreateSectionModal,
-                    icon: const Icon(Icons.add, color: Colors.black),
+                    icon: const Icon(Icons.add,size:20, color: Colors.black),
                     label: const Text(
-                      'Create Section',
+                      'Create Category',
                       style: TextStyle(color: Colors.black),
                     ),
                   ),
@@ -234,30 +401,65 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      // appBar: AppBar(title: const Text('Settings')),
       body: SingleChildScrollView(
       child: Column(
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Categories',
-                style: AppTextStyles.header.copyWith(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+                children: [
+                 
+                  Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black, width: 0.3),
+                  ),
+                  child: IconButton(
+                        //  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          icon: const Icon(CupertinoIcons.back, color: Colors.black), 
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Setting',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const Spacer(),
+                 
+                    
+                   
+                ],
+              )
+
           ),
+          // Align(
+          //   alignment: Alignment.centerLeft,
+          //   child: Padding(
+          //     padding: const EdgeInsets.symmetric(horizontal: 12),
+          //     child: Text(
+          //       'Categories',
+          //       style: AppTextStyles.header.copyWith(
+          //         color: Colors.black,
+          //         fontSize: 16,
+          //         fontWeight: FontWeight.w600,
+          //       ),
+          //     ),
+          //   ),
+          // ),
           // Height calculated based on `displaySections`
+          const SizedBox(height: 12),
           SizedBox(
             height: (48.0 * displaySections.length) +
                 (displaySections.isNotEmpty ? 8.0 * 2 : 0),
             child: ReorderableListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               itemCount: displaySections.length,
               itemBuilder: (BuildContext context, int index) {
                 final section = displaySections[index]; // Use displaySections
@@ -276,10 +478,10 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 42,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.black, width: 0.5),
@@ -289,14 +491,21 @@ class _SettingsPageState extends State<SettingsPage> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 onPressed: _showCreateSectionModal,
-                icon: const Icon(Icons.add, color: Colors.black),
+                icon: const Icon(Icons.add,size:20, color: Colors.black),
                 label: const Text(
-                  'Create Section',
+                  'Create Category',
                   style: TextStyle(color: Colors.black),
                 ),
               ),
             ),
           ),
+          Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12,vertical:12),
+                  child: Container(
+                    height: 0.2,
+                    color: Colors.black,
+                  ),
+                ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -304,7 +513,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 alignment: Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.only(
-                      left: 16, right: 16, top: 16, bottom: 8),
+                      left: 12, right: 12, top: 16, bottom: 4),
                   child: Text(
                     'Additional Settings',
                     style: AppTextStyles.taskItem.copyWith(
@@ -410,7 +619,7 @@ class __FiltersBarState extends State<_FiltersBar> {
 
     if (isSmallScreen) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -425,7 +634,7 @@ class __FiltersBarState extends State<_FiltersBar> {
       );
     } else {
       return Padding(
-        padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+        padding: const EdgeInsets.only(top: 6, left: 12, right: 12),
         child: Row(
           children: [
             _buildExpandChip(),

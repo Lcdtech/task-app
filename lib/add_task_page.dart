@@ -4,6 +4,7 @@ import '../models/section.dart';
 import 'custom_datetime_picker.dart';
 import 'styles.dart'; // Assuming AppColors and AppTextStyles are defined here
 import 'create_section_page.dart';
+import 'package:flutter/cupertino.dart';
 
 // Assuming Section and other necessary imports/files are correctly linked
 
@@ -40,7 +41,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   @override
   void initState() {
     super.initState();
-    _sections = List.from(widget.sections); // Use List.from to make it mutable if you plan to add to it directly
+      _sections = widget.sections.where((section) => section.name != 'Completed').toList();// Use List.from to make it mutable if you plan to add to it directly
     _controller.text = widget.existingTask ?? '';
     selectedDateTime = widget.existingDate;
 
@@ -68,29 +69,134 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
-  void _confirmDelete() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Task'),
-        content: const Text('Are you sure you want to delete this task?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+ void _confirmDelete() {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      padding: const EdgeInsets.only(left: 8,right:8, top: 16,bottom:0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // White Modal Card with content
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            padding: const EdgeInsets.only(left: 0,right:0, top: 0,bottom:0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon
+                Image.asset(
+                            'assets/images/delete.png',
+                            width: 154,
+                            height: 154,
+                          ),
+
+                
+
+                // Title
+                const Text(
+                  'Delete this task?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Subtitle
+                const Padding(
+                padding: EdgeInsets.symmetric(horizontal:20), // You can adjust this value
+                child: Text(
+                  'Once deleted, you’ll no longer see this task in your task list',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.black,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+                const SizedBox(height: 24),
+
+              
+               // Yes, Delete Button (flat with black top border)
+              SizedBox(
+                width: double.infinity,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Colors.black12, width: 1), // ✅ thin top border
+                    ),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical:10),
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onDelete?.call();
+                      Navigator.pop(context);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      foregroundColor: Colors.red,
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                    child: const Text('Yes, Delete'),
+                  ),
+                ),
+              ),
+
+              ],
+            ),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onDelete?.call();
-              Navigator.pop(context);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+
+          const SizedBox(height: 8),
+
+          // Cancel button below with transparent background between
+                    SizedBox(
+            width: double.infinity,
+            child: Material(
+              color: Colors.white, // ✅ Force background color here
+              borderRadius: BorderRadius.circular(12),
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  side: BorderSide(color: Colors.grey[300]!),
+                ),
+                child: const Text(
+                  'No, Cancel',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ),
           ),
+
+
+
+          const SizedBox(height: 8), // Space from bottom
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   void _showCreateSectionModal() {
     showModalBottomSheet(
@@ -178,7 +284,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   Widget build(BuildContext context) {
     final dateText = selectedDateTime != null
         ? DateFormat.yMMMMd().add_jm().format(selectedDateTime!)
-        : 'Select Due Date & Time';
+        : 'Set Due Date & Time';
 
     // Determine the background color based on selected section or a default if none
     Color backgroundColor = Colors.white; // Default neutral background
@@ -211,43 +317,78 @@ class _AddTaskPageState extends State<AddTaskPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               if (_sections.isNotEmpty)
               Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
+                 
+                  Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 0.3),
                   ),
-                  const SizedBox(width: 8),
+                  child: IconButton(
+                        //  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          icon: const Icon(CupertinoIcons.back, color: Colors.white), 
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                  ),
+                  const SizedBox(width: 12),
                   Text(
                     isEditing
                         ? (_sections.firstWhereOrNull((s) => s.id == selectedSectionId)?.name ?? 'Edit Task')
-                        : 'Add Task',
+                        : 'Add New Task',
                     style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w400,
                       color: Colors.white,
                     ),
                   ),
                   const Spacer(),
                   if (isEditing)
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.white),
-                      onPressed: _confirmDelete,
+                    // IconButton(
+                    //   icon: const Icon(Icons.delete, color: Colors.white),
+                    //   onPressed: _confirmDelete,
+                    // ),
+
+
+                   GestureDetector(
+                    onTap: _confirmDelete,
+                    child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 0.3),
+                  ),
+                  child:   Image.asset(
+                      'assets/images/Trash.png',
+                      width: 36, // You can adjust size
+                      height: 36,
                     ),
+                  
+                  )
+                   ),
+                  
+                    
+                   
                 ],
               )
               else
               Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    onPressed: () => Navigator.pop(context),
+                  Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black, width: 0.3),
                   ),
-                  const SizedBox(width: 8),
+                  child: IconButton(
+                        //  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          icon: const Icon(CupertinoIcons.back, color: Colors.black), 
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                  ),
+                  const SizedBox(width: 12),
                   Text(
-                    'Add Task',
+                    'Add New Task',
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -284,7 +425,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       keyboardType: TextInputType.multiline,
                       onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
-                        hintText: 'Type Your Task Title Here..',
+                        hintText: 'Type Your Task Title Here...',
                         hintStyle: TextStyle(color: Colors.grey),
                         border: InputBorder.none,
                         isCollapsed: true,
@@ -370,22 +511,41 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isFormValid ? AppColors.black : Colors.grey,
-                      shape: RoundedRectangleBorder(
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                      (Set<MaterialState> states) {
+                        if (states.contains(MaterialState.disabled)) {
+                          return Colors.grey.shade400; // custom disabled background
+                        }
+                        return AppColors.black; // enabled background
+                      },
+                    ),
+                    foregroundColor: MaterialStateProperty.resolveWith<Color>(
+                      (Set<MaterialState> states) {
+                        if (states.contains(MaterialState.disabled)) {
+                          return Colors.white70; // custom disabled text/icon color
+                        }
+                        return AppColors.white; // enabled text/icon color
+                      },
+                    ),
+                    shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                      RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(32),
                       ),
                     ),
-                    onPressed: isFormValid ? _handleAddOrEdit : null, // Disable button if form is not valid
-                    icon: Icon(
-                      isEditing ? Icons.edit : Icons.add,
-                      color: AppColors.white,
-                    ),
-                    label: Text(
-                      isEditing ? 'Update Task' : 'Add Task',
-                      style: AppTextStyles.buttonText,
-                    ),
                   ),
+                  onPressed: isFormValid ? _handleAddOrEdit : null,
+                  icon: Icon(
+                    isEditing ? Icons.edit : Icons.add,
+                    size: isEditing ? 15 : 20,
+                    color: isFormValid ? Colors.white:Colors.black,
+                  ),
+                  label: Text(
+                    isEditing ? 'Update Task' : 'Add Task',
+                    style: isFormValid ?AppTextStyles.buttonText :AppTextStyles.buttonText.copyWith(color:Colors.black),
+                  ),
+                ),
+
                 ),
               ),
             ],

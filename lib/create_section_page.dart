@@ -70,14 +70,41 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            "Create New Section",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
+          Row(
+          children: [
+            const Text(
+              "Create New Category",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: () {
+                  // Handle close action here
+                   Navigator.pop(context);
+                },
+                child:Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black, width: 0.3),
+              ),
+              child:  const Padding(
+                  padding: EdgeInsets.all(8.0), // Adjust padding for better icon fit
+                  child: Icon(
+                    Icons.close,
+                    size: 20, // Adjust icon size as needed
+                    color: Colors.black, // Change color if needed
+                  ),
+                ),
+              
+            )
+            ),
+          ],
+        ),
+          
           const SizedBox(height: 16),
           ColorPicker(
             color: _selectedColor,
@@ -95,39 +122,80 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
             wheelSquareBorderRadius: 50,
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _nameController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Type Section title here...',
-              hintStyle: TextStyle(color: Colors.grey[400]),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-              errorText: widget.errorText ?? _errorMessage,
-              filled: true,
-              fillColor: _selectedColor.withOpacity(1),
-            ),
-            onChanged: (_) {
-              if (_errorMessage != null) {
-                setState(() => _errorMessage = null);
-              }
-              widget.onError?.call('');
-            },
+          Container(
+          height: 64,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: _selectedColor.withOpacity(1),
+            border: Border.all(color: _selectedColor.withOpacity(1)),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _isButtonEnabled ? _createSection : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(32),
-                ),
+          child: Center(
+            child: TextField(
+              controller: _nameController,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 1,
+              decoration: const InputDecoration(
+                hintText: 'Type Category title here...',
+                hintStyle: TextStyle(color: Colors.white),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16), // No vertical padding needed
               ),
-              child:  Text("Create", style: _isButtonEnabled  ? TextStyle(color: Colors.white) : TextStyle(color: Colors.black)),
+              onChanged: (_) {
+                if (_errorMessage != null) {
+                  setState(() => _errorMessage = null);
+                }
+                widget.onError?.call('');
+              },
             ),
           ),
+        ),
+          const SizedBox(height: 16),
+          // SizedBox(
+          //   width: double.infinity,
+          //   height: 50,
+          //   child: ElevatedButton(
+          //     onPressed: _isButtonEnabled ? _createSection : null,
+          //     style: ElevatedButton.styleFrom(
+          //       backgroundColor: Colors.black,
+          //       shape: RoundedRectangleBorder(
+          //         borderRadius: BorderRadius.circular(32),
+          //       ),
+          //     ),
+          //     child:  Text("Create", style: _isButtonEnabled  ? TextStyle(color: Colors.white) : TextStyle(color: Colors.black)),
+          //   ),
+          // ),
+          SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                      (Set<MaterialState> states) {
+                        if (states.contains(MaterialState.disabled)) {
+                          return Colors.grey.shade400; // custom disabled background
+                        }
+                        return AppColors.black; // enabled background
+                      },
+                    ),
+                    foregroundColor: MaterialStateProperty.resolveWith<Color>(
+                      (Set<MaterialState> states) {
+                        if (states.contains(MaterialState.disabled)) {
+                          return Colors.white70; // custom disabled text/icon color
+                        }
+                        return AppColors.white; // enabled text/icon color
+                      },
+                    ),
+                    shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                    ),
+                  ),
+                  onPressed: _isButtonEnabled ? _createSection : null,
+                  label: Text("Create", style: _isButtonEnabled  ? TextStyle(color: Colors.white) : TextStyle(color: Colors.black)),
+                ),
+
+                ),
         ],
       ),
     );

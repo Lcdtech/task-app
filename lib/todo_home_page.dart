@@ -25,12 +25,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
   bool _allExpanded = false;
   String currentFilter = 'Color';
   String? _editingSectionId;
-  
-  // Drag state variables
-  Offset? _dragStartPosition;
-  String? _draggedTaskId;
-  String? _draggedSectionId;
-  int? _originalIndex;
 
   @override
   void initState() {
@@ -57,7 +51,14 @@ class _TodoHomePageState extends State<TodoHomePage> {
       );
     }).toList();
 
+    // Find and move "Completed" section to the end if it exists
     completedIndex = sections.indexWhere((s) => s.name == 'Completed');
+    if (completedIndex != -1) {
+      final completedSection = sections.removeAt(completedIndex!);
+      sections.add(completedSection);
+      completedIndex = sections.length - 1;
+    }
+    
     return sections;
   }
 
@@ -123,51 +124,34 @@ class _TodoHomePageState extends State<TodoHomePage> {
     });
   }
 
-  // Drag methods
-  void _startDrag(String taskId, String sectionId, int index, Offset position) {
-    HapticFeedback.lightImpact();
+  void _collapseAllExcept(String sectionId) {
     setState(() {
-      _dragStartPosition = position;
-      _draggedTaskId = taskId;
-      _draggedSectionId = sectionId;
-      _originalIndex = index;
-    });
-  }
-
-  void _updateDragPosition(Offset position) {
-    // Optional: Add visual updates during drag if needed
-  }
-
-  void _endDrag() {
-    setState(() {
-      _dragStartPosition = null;
-      _draggedTaskId = null;
-      _draggedSectionId = null;
-      _originalIndex = null;
-    });
-  }
-
-  void _handleReorder(int newIndex) {
-  if (_draggedTaskId == null || _draggedSectionId == null || _originalIndex == null) return;
-  
-  final sections = getAllSections();
-  final sectionIndex = sections.indexWhere((s) => s.id == _draggedSectionId);
-  
-  if (sectionIndex != -1) {
-    final tasks = sections[sectionIndex].tasks;
-    final taskIndex = tasks.indexWhere((t) => t['id'] == _draggedTaskId);
-    
-    if (taskIndex != -1) {
-      final task = tasks[taskIndex];
-      setState(() {
-        tasks.removeAt(taskIndex);
-        final adjustedIndex = newIndex > taskIndex ? newIndex - 1 : newIndex;
-        tasks.insert(adjustedIndex, task);
-        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      // Collapse all sections
+      _expanded.forEach((key, value) {
+        _expanded[key] = false;
       });
+      
+      // Expand the specified section
+      _expanded[sectionId] = true;
+      _allExpanded = false;
+    });
+  }
+
+  void _handleReorder(int oldIndex, int newIndex, String sectionId) {
+    final sections = getAllSections();
+    final sectionIndex = sections.indexWhere((s) => s.id == sectionId);
+    
+    if (sectionIndex != -1) {
+      final tasks = sections[sectionIndex].tasks;
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+      final task = tasks.removeAt(oldIndex);
+      tasks.insert(newIndex, task);
+      sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      HapticFeedback.selectionClick();
     }
   }
-}
 
   void _navigateToAddTask() async {
     late List<Section> sections = getAllSections();
@@ -201,73 +185,195 @@ class _TodoHomePageState extends State<TodoHomePage> {
           'completed': false,
         });
         sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-        setState(() {});
+        _collapseAllExcept(selectedSectionId);
       }
     }
   }
 
   void _deleteTask(String sectionId, String taskId) {
-    final sections = getAllSections();
-    final sectionIndex = sections.indexWhere((s) => s.id == sectionId);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.only(left: 8,right:8, top: 16,bottom:0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              padding: const EdgeInsets.only(left: 0,right:0, top: 0,bottom:0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/delete.png',
+                    width: 154,
+                    height: 154,
+                  ),
+                  const Text(
+                    'Delete this task?',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal:20),
+                    child: Text(
+                      "Once deleted, you'll no longer see this task in your task list",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.black,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          top: BorderSide(color: Colors.black12, width: 1),
+                        ),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical:10),
+                      child: TextButton(
+                        onPressed: () {
+                          final sections = getAllSections();
+                          final sectionIndex = sections.indexWhere((s) => s.id == sectionId);
 
-    if (sectionIndex != -1) {
-      setState(() {
-        sections[sectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
-        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-      });
-    }
-  }
-
-  void _editTask(String sectionId, String taskId, String currentText,
-      DateTime currentDate) async {
-    late List<Section> sections = getAllSections();
-
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddTaskPage(
-          sections: sections,
-          existingTask: currentText,
-          existingDate: currentDate,
-          existingSectionId: sectionId,
-          onDelete: () => _deleteTask(sectionId, taskId),
-          onSectionCreated: (newSection) {
-            setState(() {
-              sections.add(newSection);
-              sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-            });
-          },
+                          if (sectionIndex != -1) {
+                            setState(() {
+                              sections[sectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
+                              sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                            });
+                          }
+                          Navigator.pop(context);
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          foregroundColor: Colors.red,
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                        child: const Text('Yes, Delete'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: Colors.grey[300]!),
+                  ),
+                  child: const Text(
+                    'No, Cancel',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );
+  }
 
-    if (result != null && result is Map<String, dynamic>) {
-      final selectedSectionId = result['sectionId'];
-      final newTask = result['task'];
-      final dueDate = result['dueDate'];
+  void _editTask(String sectionId, String taskId, String currentText,
+    DateTime currentDate) async {
+  late List<Section> sections = getAllSections();
 
-      final oldSectionIndex = sections.indexWhere((s) => s.id == sectionId);
-      if (oldSectionIndex != -1) {
-        sections[oldSectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => AddTaskPage(
+        sections: sections,
+        existingTask: currentText,
+        existingDate: currentDate,
+        existingSectionId: sectionId,
+        onDelete: () => _deleteTask(sectionId, taskId),
+        onSectionCreated: (newSection) {
+          setState(() {
+            sections.add(newSection);
+            sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+          });
+        },
+      ),
+    ),
+  );
+
+  if (result != null && result is Map<String, dynamic>) {
+    final selectedSectionId = result['sectionId'];
+    final newTask = result['task'];
+    final dueDate = result['dueDate'];
+
+    // Find the original task index before removing it
+    final oldSectionIndex = sections.indexWhere((s) => s.id == sectionId);
+    int? originalIndex;
+    
+    if (oldSectionIndex != -1) {
+      originalIndex = sections[oldSectionIndex].tasks.indexWhere((task) => task['id'] == taskId);
+      sections[oldSectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
+    }
+
+    final newSectionIndex = sections.indexWhere((s) => s.id == selectedSectionId);
+    if (newSectionIndex != -1) {
+      final newTaskData = {
+        'id': taskId,
+        'text': newTask,
+        'dueDate': dueDate,
+        'completed': false,
+      };
+
+      // If moving within the same section, insert at original position
+      if (sectionId == selectedSectionId && originalIndex != null && originalIndex != -1) {
+        sections[newSectionIndex].tasks.insert(originalIndex, newTaskData);
+      } 
+      // If moving to a different section, add to the end
+      else {
+        sections[newSectionIndex].tasks.add(newTaskData);
       }
 
-      final newSectionIndex = sections.indexWhere((s) => s.id == selectedSectionId);
-      if (newSectionIndex != -1) {
-        sections[newSectionIndex].tasks.add({
-          'id': taskId,
-          'text': newTask,
-          'dueDate': dueDate,
-          'completed': false,
-        });
-        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-        setState(() {});
-      }
+      sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      _collapseAllExcept(selectedSectionId);
     }
   }
+}
 
   Section _getOrCreateCompletedSection(List<Section> sections) {
     try {
-      return sections.firstWhere((section) => section.name == 'Completed');
+      final completedSection = sections.firstWhere((section) => section.name == 'Completed');
+      if (sections.last != completedSection) {
+        sections.remove(completedSection);
+        sections.add(completedSection);
+      }
+      return completedSection;
     } catch (e) {
       final completedSection = Section(
         id: const Uuid().v4(),
@@ -339,32 +445,35 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   List<Widget> _buildTaskGroups(List<Section> sections) {
+    final visibleSections = sections.where((section) {
+      return !(section.name == 'Completed' && !_shouldShowCompletedSection(sections));
+    }).toList();
+
     if (currentFilter == 'Color') {
       return [
-        for (int i = 0; i < sections.length; i++)
-          if (!(sections[i].name == 'Completed' && !_shouldShowCompletedSection(sections)))
-            TodoGroup(
-              id: sections[i].id,
-              title: sections[i].name,
-              color: sections[i].color,
-              items: sections[i].tasks,
-              showItems: _expanded[sections[i].id] ?? true,
-              trailingCount: sections[i].tasks.length,
-              onToggle: () => toggleExpand(sections[i].id),
-              isLast: i == sections.length - 1,
-              sectionId: sections[i].id,
-              onDeleteTask: _deleteTask,
-              onEditTask: _editTask,
-              isEditing: _editingSectionId == sections[i].id,
-              onLongPress: () => _toggleSectionEditMode(sections[i].id),
-              onToggleComplete: (taskId, isCompleted) {
-                _toggleTaskCompletion(sections[i].id, taskId, isCompleted);
-              },
-              onDragStarted: _startDrag,
-              onDragUpdated: _updateDragPosition,
-              onDragEnded: _endDrag,
-              onDragAccept: _handleReorder,
-            ),
+        for (int i = 0; i < visibleSections.length; i++)
+          ColorFilterGroup(
+            key: ValueKey(visibleSections[i].id),
+            id: visibleSections[i].id,
+            title: visibleSections[i].name,
+            color: visibleSections[i].color,
+            items: visibleSections[i].tasks,
+            showItems: _expanded[visibleSections[i].id] ?? true,
+            trailingCount: visibleSections[i].tasks.length,
+            onToggle: () => toggleExpand(visibleSections[i].id),
+            isLast: i == visibleSections.length - 1,
+            sectionId: visibleSections[i].id,
+            onDeleteTask: _deleteTask,
+            onEditTask: _editTask,
+            isEditing: _editingSectionId == visibleSections[i].id,
+            onLongPress: () => _toggleSectionEditMode(visibleSections[i].id),
+            onToggleComplete: (taskId, isCompleted) {
+              _toggleTaskCompletion(visibleSections[i].id, taskId, isCompleted);
+            },
+            onReorder: (oldIndex, newIndex) {
+              _handleReorder(oldIndex, newIndex, visibleSections[i].id);
+            },
+          ),
       ];
     } else {
       final now = DateTime.now();
@@ -379,6 +488,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
         }
         
         for (final task in section.tasks) {
+          if (task['completed'] == true) continue;
+          
           if (task['dueDate'] != null) {
             final dueDate = DateTime.parse(task['dueDate']);
             if (dueDate.isBefore(today)) continue;
@@ -433,16 +544,15 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
       return [
         for (int i = 0; i < sortedCategories.length; i++)
-          TodoGroup(
+          DateFilterGroup(
+            key: ValueKey('date_${sortedCategories[i]}'),
             id: 'date_${sortedCategories[i]}',
             title: sortedCategories[i],
-            color: Colors.white,
             items: tasksByDate[sortedCategories[i]]!,
             showItems: _expanded['date_${sortedCategories[i]}'] ?? true,
             trailingCount: tasksByDate[sortedCategories[i]]!.length,
             onToggle: () => toggleExpand('date_${sortedCategories[i]}'),
             isLast: i == sortedCategories.length - 1,
-            isDateGroup: true,
             sectionId: '',
             onDeleteTask: _deleteTask,
             onEditTask: _editTask,
@@ -527,7 +637,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                     onTap: _exitEditMode,
                     behavior: HitTestBehavior.opaque,
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: OverlappingTaskList(taskGroups: groups),
                     ),
                   ),
@@ -556,7 +666,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 }
 
-class TodoGroup extends StatelessWidget {
+class ColorFilterGroup extends StatelessWidget {
   final String id;
   final String title;
   final Color color;
@@ -565,19 +675,15 @@ class TodoGroup extends StatelessWidget {
   final bool showItems;
   final VoidCallback? onToggle;
   final bool isLast;
-  final bool isDateGroup;
   final String sectionId;
   final Function(String, String) onDeleteTask;
   final Function(String, String, String, DateTime) onEditTask;
   final Function(String taskId, bool isCompleted) onToggleComplete;
   final bool isEditing;
   final VoidCallback? onLongPress;
-  final Function(String taskId, String sectionId, int index, Offset position)? onDragStarted;
-  final Function(Offset position)? onDragUpdated;
-  final Function()? onDragEnded;
-  final Function(int newIndex)? onDragAccept;
+  final Function(int oldIndex, int newIndex)? onReorder;
 
-  const TodoGroup({
+  const ColorFilterGroup({
     Key? key,
     required this.id,
     required this.title,
@@ -587,17 +693,13 @@ class TodoGroup extends StatelessWidget {
     this.showItems = true,
     this.onToggle,
     this.isLast = false,
-    this.isDateGroup = false,
     required this.sectionId,
     required this.onDeleteTask,
     required this.onEditTask,
     required this.onToggleComplete,
     this.isEditing = false,
     this.onLongPress,
-    this.onDragStarted,
-    this.onDragUpdated,
-    this.onDragEnded,
-    this.onDragAccept,
+    this.onReorder,
   }) : super(key: key);
 
   @override
@@ -609,12 +711,11 @@ class TodoGroup extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
-          color: isDateGroup ? Colors.white : color,
+          color: color,
           borderRadius: BorderRadius.circular(16),
-          border: isDateGroup ? Border.all(color: Colors.grey.shade300) : null,
         ),
         margin: const EdgeInsets.only(bottom: 0),
-        padding: const EdgeInsets.only(top: 8),
+        padding: EdgeInsets.only(top: 8, bottom: isLast ? 0 : 8),
         constraints: BoxConstraints(minHeight: showItems ? 0 : 60),
         child: Column(
           children: [
@@ -626,45 +727,94 @@ class TodoGroup extends StatelessWidget {
                 onTap: onToggle,
                 title: Text(
                   title,
-                  style: isDateGroup
-                      ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
-                      : AppTextStyles.groupTitle,
+                  style: AppTextStyles.groupTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Text(
                   '$count',
-                  style: isDateGroup
-                      ? AppTextStyles.groupTitle.copyWith(color: Colors.black)
-                      : AppTextStyles.groupTitle,
+                  style: AppTextStyles.groupTitle.copyWith(fontSize: 16),
                 ),
               ),
             ),
-            if (showItems)
+            if (showItems && isEditing)
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: items.length,
+                buildDefaultDragHandles: false,
+                onReorder: (oldIndex, newIndex) {
+                  if (onReorder != null) {
+                    onReorder!(oldIndex, newIndex);
+                  }
+                },
+                proxyDecorator:
+                  (Widget child, int index, Animation<double> animation) {
+                return Material(
+                  elevation: 0,
+                  color: Colors.transparent,
+                  child: child,
+                );
+              },
+                itemBuilder: (context, index) {
+                  final task = items[index];
+                  return ReorderableDragStartListener(
+                    key: Key(task['id']),
+                    index: index,
+                    child: Transform.translate(
+                      offset: Offset(0, isLast ? -15 : -25),
+                      child: ColorFilterTaskItem(
+                        text: task['text'] ?? '',
+                        isLastTask: index == items.length - 1,
+                        dueDate: task['dueDate'],
+                        taskId: task['id'] ?? '',
+                        sectionId: sectionId,
+                        sectionName: title, 
+                        onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
+                        onEdit: () {
+                          final dueDate = task['dueDate'] != null
+                              ? DateTime.parse(task['dueDate'])
+                              : DateTime.now();
+                          onEditTask(
+                            sectionId,
+                            task['id'] ?? '',
+                            task['text'] ?? '',
+                            dueDate,
+                          );
+                        },
+                        onToggleComplete: (isCompleted) {
+                          onToggleComplete(task['id'], isCompleted);
+                        },
+                        completed: task['completed'] ?? false,
+                        isEditing: isEditing,
+                        isDraggable: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            if (showItems && !isEditing)
               ...items.asMap().entries.map((entry) {
                 final index = entry.key;
                 final task = entry.value;
                 
                 return Transform.translate(
+                  key: Key(task['id']),
                   offset: Offset(0, isLast ? -15 : -25),
-                  child: _TodoItem(
+                  child: ColorFilterTaskItem(
                     text: task['text'] ?? '',
-                    isDateGroup: isDateGroup,
+                    isLastTask: index == items.length - 1,
                     dueDate: task['dueDate'],
-                    taskColor: task['sectionColor'] != null
-                        ? Color(task['sectionColor'])
-                        : null,
                     taskId: task['id'] ?? '',
-                    sectionId: task['sectionId'] ?? sectionId,
+                    sectionId: sectionId,
                     sectionName: title, 
-                    onDelete: () => onDeleteTask(
-                        task['sectionId'] ?? sectionId, task['id'] ?? ''),
+                    onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
                     onEdit: () {
                       final dueDate = task['dueDate'] != null
                           ? DateTime.parse(task['dueDate'])
                           : DateTime.now();
                       onEditTask(
-                        task['sectionId'] ?? sectionId,
+                        sectionId,
                         task['id'] ?? '',
                         task['text'] ?? '',
                         dueDate,
@@ -675,12 +825,6 @@ class TodoGroup extends StatelessWidget {
                     },
                     completed: task['completed'] ?? false,
                     isEditing: isEditing,
-                    index: index,
-                    onDragStarted: onDragStarted,
-                    onDragUpdated: onDragUpdated,
-                    onDragEnded: onDragEnded,
-                    onDragAccepted: onDragAccept,
-                    isDragging: false, // Managed by parent
                   ),
                 );
               }).toList(),
@@ -691,9 +835,275 @@ class TodoGroup extends StatelessWidget {
   }
 }
 
-class _TodoItem extends StatefulWidget {
+class DateFilterGroup extends StatelessWidget {
+  final String id;
+  final String title;
+  final List<Map<String, dynamic>> items;
+  final int? trailingCount;
+  final bool showItems;
+  final VoidCallback? onToggle;
+  final bool isLast;
+  final String sectionId;
+  final Function(String, String) onDeleteTask;
+  final Function(String, String, String, DateTime) onEditTask;
+  final Function(String taskId, bool isCompleted) onToggleComplete;
+
+  const DateFilterGroup({
+    Key? key,
+    required this.id,
+    required this.title,
+    required this.items,
+    this.trailingCount,
+    this.showItems = true,
+    this.onToggle,
+    this.isLast = false,
+    required this.sectionId,
+    required this.onDeleteTask,
+    required this.onEditTask,
+    required this.onToggleComplete,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final count = trailingCount ?? items.length;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      margin: const EdgeInsets.only(bottom: 0),
+      padding: EdgeInsets.only(top: 8, bottom: isLast ? 0 : 8),
+      constraints: BoxConstraints(minHeight: showItems ? 0 : 60),
+      child: Column(
+        children: [
+          SizedBox(
+            height: isLast ? 56 : 71,
+            child: ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              onTap: onToggle,
+              title: Text(
+                title,
+                style: AppTextStyles.groupTitle.copyWith(color: Colors.black),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Text(
+                '$count',
+                style: AppTextStyles.groupTitle.copyWith(
+                  color: Colors.black,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          if (showItems)
+            ...items.map((task) {
+              return Transform.translate(
+                key: Key(task['id']),
+                offset: Offset(0, isLast ? -15 : -25),
+                child: DateFilterTaskItem(
+                  text: task['text'] ?? '',
+                  isLastTask: items.last == task,
+                  dueDate: task['dueDate'],
+                  taskColor: task['sectionColor'] != null
+                      ? Color(task['sectionColor'])
+                      : null,
+                  taskId: task['id'] ?? '',
+                  sectionId: task['sectionId'] ?? sectionId,
+                  sectionName: title, 
+                  onDelete: () => onDeleteTask(
+                      task['sectionId'] ?? sectionId, task['id'] ?? ''),
+                  onEdit: () {
+                    final dueDate = task['dueDate'] != null
+                        ? DateTime.parse(task['dueDate'])
+                        : DateTime.now();
+                    onEditTask(
+                      task['sectionId'] ?? sectionId,
+                      task['id'] ?? '',
+                      task['text'] ?? '',
+                      dueDate,
+                    );
+                  },
+                  onToggleComplete: (isCompleted) {
+                    onToggleComplete(task['id'], isCompleted);
+                  },
+                  completed: task['completed'] ?? false,
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
+  }
+}
+
+class ColorFilterTaskItem extends StatelessWidget {
   final String text;
-  final bool isDateGroup;
+  final String? dueDate;
+  final String taskId;
+  final String sectionId;
+  final String sectionName;
+  final VoidCallback onDelete;
+  final VoidCallback onEdit;
+  final ValueChanged<bool> onToggleComplete;
+  final bool completed;
+  final bool isEditing;
+  final bool isDraggable;
+  final bool isLastTask;
+
+  const ColorFilterTaskItem({
+    Key? key,
+    required this.text,
+    this.dueDate,
+    required this.taskId,
+    required this.sectionId,
+    required this.sectionName,
+    required this.onDelete,
+    required this.onEdit,
+    required this.onToggleComplete,
+    required this.completed,
+    required this.isEditing,
+    this.isDraggable = false,
+    this.isLastTask = false,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: GestureDetector(
+        onTap: isEditing || sectionName == "Completed" ? null : onEdit,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 36,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 12,
+                  right: isEditing ? 36 : 0,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (isEditing)
+                      isDraggable 
+                      ? ReorderableDragStartListener(
+                          index: 0,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(
+                                Icons.drag_indicator,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        )
+                      : GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Icon(
+                              Icons.drag_indicator,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        )
+                    else if (!completed)
+                      CustomCheckbox(
+                        isChecked: sectionName == "Completed" ? true : completed,
+                        isDateGroup: false,
+                        onTap: () {
+                          onToggleComplete(!completed);
+                        },
+                      )
+                    else
+                      IgnorePointer(
+                        child: Opacity(
+                          opacity: 1,
+                          child: CustomCheckbox(
+                            isChecked: true,
+                            isDateGroup: false,
+                            onTap: () {},
+                          ),
+                        ),
+                      ),
+                    
+                    SizedBox(width: isEditing ? 2 : 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            text,
+                            style: AppTextStyles.taskItem.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                              decorationColor: Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            if (isEditing)
+              Positioned(
+                right: 8,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    onPressed: onDelete,
+                  ),
+                ),
+              ),
+
+            if (!isLastTask)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Container(
+                    height: 0.2,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DateFilterTaskItem extends StatelessWidget {
+  final String text;
   final String? dueDate;
   final Color? taskColor;
   final String taskId;
@@ -703,121 +1113,91 @@ class _TodoItem extends StatefulWidget {
   final VoidCallback onEdit;
   final ValueChanged<bool> onToggleComplete;
   final bool completed;
-  final bool isEditing;
-  final int index;
-  final Function(String taskId, String sectionId, int index, Offset position)? onDragStarted;
-  final Function(Offset position)? onDragUpdated;
-  final Function()? onDragEnded;
-  final Function(int newIndex)? onDragAccepted;
-  final bool isDragging;
+  final bool isLastTask;
 
-  const _TodoItem({
+  const DateFilterTaskItem({
     Key? key,
     required this.text,
-    this.isDateGroup = false,
     this.dueDate,
     this.taskColor,
     required this.taskId,
     required this.sectionId,
-    required this.sectionName, 
+    required this.sectionName,
     required this.onDelete,
     required this.onEdit,
     required this.onToggleComplete,
     required this.completed,
-    required this.isEditing,
-    required this.index,
-    this.onDragStarted,
-    this.onDragUpdated,
-    this.onDragEnded,
-    this.onDragAccepted,
-    this.isDragging = false,
+    this.isLastTask = false,
   }) : super(key: key);
 
   @override
-  State<_TodoItem> createState() => _TodoItemState();
-}
-
-class _TodoItemState extends State<_TodoItem> {
-  var isChecked = false;
-
-  @override
-  void initState() {
-    super.initState();
-    isChecked = widget.completed;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final itemHeight = widget.dueDate != null ? 36.0 : 48.0;
-    final circleSize = 24.0;
-    final isCompletedTask = widget.completed; 
-
-    return LongPressDraggable<int>(
-      data: widget.index,
-      feedback: Material(
-        color: Colors.transparent,
-        child: Container(
-          width: MediaQuery.of(context).size.width - 32,
-          height: itemHeight,
-          decoration: BoxDecoration(
-            color: widget.isDateGroup ? Colors.white : widget.taskColor ?? Colors.grey,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: circleSize / 2 + 8,
-              right: widget.isEditing ? 36 : 0,
-            ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 0, vertical:4),
+      child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        if (taskColor != null)
+          Positioned.fill(
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (widget.isEditing && !widget.isDateGroup)
-                  Icon(
-                    Icons.drag_indicator,
-                    color: widget.isDateGroup ? Colors.black : Colors.white,
-                    size: 20,
-                  )
-                else if (!isCompletedTask)
-                  CustomCheckbox(
-                    isChecked: widget.completed,
-                    isDateGroup: widget.isDateGroup,
-                    onTap: () {
-                      widget.onToggleComplete(!widget.completed);
-                    },
-                  )
-                else
-                  IgnorePointer(
-                    child: Opacity(
-                      opacity: 1,
-                      child: CustomCheckbox(
-                        isChecked: true,
-                        isDateGroup: widget.isDateGroup,
-                        onTap: () {},
+                Container(
+                  width: 6.0,
+                  color: taskColor,
+                ),
+                Expanded(
+                  flex: 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          taskColor!.withOpacity(0.6),
+                          taskColor!.withOpacity(0.2),
+                        ],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
                       ),
                     ),
                   ),
+                ),
                 
+              ],
+            ),
+          ),
+
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CustomCheckbox(
+                  isChecked: completed,
+                  isDateGroup: true,
+                  onTap: () {
+                    onToggleComplete(!completed);
+                  },
+                ),
                 const SizedBox(width: 12),
                 Expanded(
+                child: GestureDetector(
+                  onTap: onEdit,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.text,
+                        text,
                         style: AppTextStyles.taskItem.copyWith(
-                          color: widget.isDateGroup
-                              ? Colors.black
-                              : AppColors.white,
+                          color: Colors.black,
                           fontWeight: FontWeight.w500,
                           fontSize: 14,
+                          decorationColor: Colors.black,
+                          decoration: completed ? TextDecoration.lineThrough : null,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -825,196 +1205,17 @@ class _TodoItemState extends State<_TodoItem> {
                     ],
                   ),
                 ),
+              ),
               ],
             ),
           ),
+        
         ),
-      ),
-      childWhenDragging: Container(
-        height: itemHeight,
-        color: Colors.transparent,
-      ),
-      onDragStarted: () {
-        HapticFeedback.lightImpact();
-        final renderBox = context.findRenderObject() as RenderBox;
-        final position = renderBox.localToGlobal(Offset.zero);
-        widget.onDragStarted?.call(widget.taskId, widget.sectionId, widget.index, position);
-      },
-      onDragEnd: (details) {
-        widget.onDragEnded?.call();
-      },
-      child: DragTarget<int>(
-        onWillAccept: (data) => true,
-        onAccept: (index) {
-          if (index != widget.index) {
-            widget.onDragAccepted?.call(index);
-          }
-        },
-        builder: (context, candidateData, rejectedData) {
-          return Opacity(
-            opacity: widget.isDragging ? 0.5 : 1.0,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  GestureDetector(
-                    onTap: isCompletedTask ? null : () => widget.onEdit(),
-                    behavior: HitTestBehavior.opaque,
-                    child: Container(
-                      height: itemHeight,
-                      decoration: BoxDecoration(
-                        gradient: widget.isDateGroup && widget.taskColor != null
-                            ? LinearGradient(
-                                colors: [
-                                  widget.taskColor!.withOpacity(0.25),
-                                  Colors.white,
-                                ],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              )
-                            : null,
-                        color: widget.isDateGroup && widget.taskColor != null
-                            ? null
-                            : (widget.isDateGroup
-                                ? Colors.white
-                                : Colors.transparent),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: widget.isDateGroup
-                            ? [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(candidateData.isNotEmpty ? 0.1 : 0.05),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : [],
-                        border: candidateData.isNotEmpty
-                            ? Border.all(
-                                color: Colors.grey.withOpacity(0.5),
-                                width: 1,
-                              )
-                            : null,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: circleSize / 2 + 8,
-                          right: widget.isEditing ? 36 : 0,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (widget.isEditing && !widget.isDateGroup)
-                              Icon(
-                                Icons.drag_indicator,
-                                color: widget.isDateGroup ? Colors.black : Colors.white,
-                                size: 20,
-                              )
-                            else if (!isCompletedTask)
-                              CustomCheckbox(
-                                isChecked: widget.completed,
-                                isDateGroup: widget.isDateGroup,
-                                onTap: () {
-                                  widget.onToggleComplete(!widget.completed);
-                                },
-                              )
-                            else
-                              IgnorePointer(
-                                child: Opacity(
-                                  opacity: 1,
-                                  child: CustomCheckbox(
-                                    isChecked: true,
-                                    isDateGroup: widget.isDateGroup,
-                                    onTap: () {},
-                                  ),
-                                ),
-                              ),
-                            
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.text,
-                                    style: AppTextStyles.taskItem.copyWith(
-                                      color: widget.isDateGroup
-                                          ? Colors.black
-                                          : AppColors.white,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  if (widget.isDateGroup && widget.taskColor != null)
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      child: Container(
-                        width: 6.0,
-                        height: itemHeight,
-                        decoration: BoxDecoration(
-                          color: widget.taskColor,
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            bottomLeft: Radius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  if (widget.isEditing && !widget.isDateGroup)
-                    Positioned(
-                      right: 8,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.delete_outline,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          onPressed: widget.onDelete,
-                        ),
-                      ),
-                    ),
-
-                  if (!widget.isDateGroup)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Container(
-                          height: 0.7,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
+      ]
       ),
     );
   }
 }
-
-
 
 class _Header extends StatelessWidget {
   const _Header({Key? key}) : super(key: key);
@@ -1033,7 +1234,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1045,11 +1246,17 @@ class _Header extends StatelessWidget {
               maxLines: 1,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SettingsPage()),
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey, width: 0.3),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              ),
             ),
           ),
         ],
@@ -1083,7 +1290,7 @@ class __FiltersBarState extends State<_FiltersBar> {
 
   @override
   Widget build(BuildContext context) {
-      final isSmallScreen = MediaQuery.of(context).size.width < 340;
+    final isSmallScreen = MediaQuery.of(context).size.width < 340;
 
     if (isSmallScreen) {
       return Padding(
@@ -1141,6 +1348,7 @@ class __FiltersBarState extends State<_FiltersBar> {
                     size: 16,
                     color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
                   ),
+                  
                   const SizedBox(width: 4),
                   Text(
                     labels[index],
@@ -1165,31 +1373,35 @@ class __FiltersBarState extends State<_FiltersBar> {
       child: SizedBox(
         width:112,
         child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.black, width: 0.5),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 16,
-              child: Icon(widget.allExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: Colors.black),
-            ),
-            const SizedBox(width: 4),
-             Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.chipText.copyWith(color: Colors.black),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.black, width: 0.5),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 16,
+                child: Image.asset(
+                'assets/images/expand.png',
+                width: 14,
+                height: 14,
               ),
-            ),
-          ],
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTextStyles.chipText.copyWith(color: Colors.black),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       )
     );
   }
@@ -1202,7 +1414,7 @@ class _AddTaskButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: SizedBox(
         width: double.infinity,
         height: 52,
@@ -1212,7 +1424,7 @@ class _AddTaskButton extends StatelessWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
           ),
           onPressed: onPressed,
-          icon: const Icon(Icons.add, color: AppColors.white),
+          icon: const Icon(Icons.add,size:20, color: AppColors.white),
           label: Text('Add Task', style: AppTextStyles.buttonText),
         ),
       ),
@@ -1234,23 +1446,26 @@ class CustomCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = isDateGroup ? Colors.grey : AppColors.white;
-    final checkColor = isDateGroup ? Colors.black : AppColors.white;
+    final borderColor = isDateGroup ? Colors.transparent : Colors.white;
+    final checkColor = isDateGroup ? Colors.black : Colors.white;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 20,
-        height: 20,
+        width: 18,
+        height: 18,
         decoration: BoxDecoration(
-          color: isChecked ? Colors.transparent : Colors.white,
-          border: isChecked
-              ? Border.all(color: borderColor, width: 1.6)
-              : null,
+          color: isChecked 
+              ?  Colors.transparent
+              : (isDateGroup ? Colors.grey[400] : Colors.white),
+          border: Border.all(
+            color: borderColor,
+            width: 1.6,
+          ),
           borderRadius: BorderRadius.circular(4),
         ),
         child: isChecked
-            ? Icon(Icons.check, size: 16, color: checkColor)
+            ? Icon(Icons.check, size: 14, color: checkColor)
             : null,
       ),
     );
