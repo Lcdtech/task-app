@@ -57,7 +57,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   bool get isFormValid =>
       selectedSectionId != null &&
-      selectedDateTime != null &&
       _controller.text.trim().isNotEmpty;
 
   bool get isEditing => widget.existingTask != null;
@@ -224,7 +223,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
                   if (exists) {
                     modalSetState(() {
-                      errorText = "Section with this name already exists";
+                      errorText = "Category with this name already exists.";
                     });
                     return;
                   }
@@ -253,32 +252,35 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   void _handleAddOrEdit() {
-    final task = _controller.text.trim();
-    if (!isFormValid) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Missing Information'),
-          content:
-              const Text('Please enter a task, select a section, and due date.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    Navigator.pop(context, {
-      'sectionId': selectedSectionId!,
-      'task': task,
-      'dueDate': selectedDateTime!.toIso8601String(),
-      'taskId': widget.existingTaskId,
-    });
+  final task = _controller.text.trim();
+  if (!isFormValid) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Missing Information'),
+        content:
+            const Text('Please enter a task and select a section.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return;
   }
+
+  // Use selectedDateTime if available, otherwise use current date/time
+  final dueDate = selectedDateTime ?? DateTime.now();
+
+  Navigator.pop(context, {
+    'sectionId': selectedSectionId!,
+    'task': task,
+    'dueDate': dueDate.toIso8601String(),
+    'taskId': widget.existingTaskId,
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -288,10 +290,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
     // Determine the background color based on selected section or a default if none
     Color backgroundColor = Colors.white; // Default neutral background
+    late Color textColor;
     if (selectedSectionId != null) {
       final selectedSection = _sections.firstWhereOrNull((s) => s.id == selectedSectionId);
       if (selectedSection != null) {
         backgroundColor = selectedSection.color;
+        final isLight = backgroundColor.computeLuminance() > 0.5;
+        textColor = isLight ? Colors.black : Colors.white;
       }
     } else if (_sections.isNotEmpty) {
       // Fallback to the color of the first section if a section isn't explicitly selected
@@ -325,11 +330,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 0.3),
+                    border: Border.all(color: textColor, width: 0.3),
                   ),
                   child: IconButton(
                         //  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                          icon: const Icon(CupertinoIcons.back, color: Colors.white), 
+                          icon:  Icon(CupertinoIcons.back, color: textColor), 
                           onPressed: () => Navigator.pop(context),
                         ),
                   ),
@@ -338,10 +343,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     isEditing
                         ? (_sections.firstWhereOrNull((s) => s.id == selectedSectionId)?.name ?? 'Edit Task')
                         : 'Add New Task',
-                    style: const TextStyle(
+                    style:  TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w400,
-                      color: Colors.white,
+                      color: textColor,
                     ),
                   ),
                   const Spacer(),
@@ -357,13 +362,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 0.3),
+                        border: Border.all(color: textColor, width: 0.3),
                       ),
                       padding: const EdgeInsets.all(10), // Add some padding to make it more visually balanced
-                      child: const Icon(
+                      child:  Icon(
                         CupertinoIcons.delete,
                         size: 16, // You can adjust the size
-                        color: Colors.white, // Change color as needed
+                        color: textColor, // Change color as needed
                       ),
                     ),
                   ),
@@ -419,19 +424,31 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   children: [
                     const SizedBox(height: 16),
                     TextField(
-                      controller: _controller,
-                      maxLines: null,
-                      minLines: 6,
-                      keyboardType: TextInputType.multiline,
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        hintText: 'Type Your Task Title Here...',
-                        hintStyle: TextStyle(color: Colors.grey),
-                        border: InputBorder.none,
-                        isCollapsed: true,
-                      ),
-                      style: const TextStyle(fontSize: 16),
+                    controller: _controller,
+                    maxLines: null,
+                    minLines: 6,
+                    keyboardType: TextInputType.multiline,
+                    onChanged: (text) {
+                      if (text.isNotEmpty && text[0] != text[0].toUpperCase()) {
+                        final newText = text[0].toUpperCase() + text.substring(1);
+                        final cursorPos = _controller.selection;
+
+                        _controller.value = TextEditingValue(
+                          text: newText,
+                          selection: cursorPos,
+                        );
+                      }
+                      setState(() {});
+                    },
+                    decoration: const InputDecoration(
+                      hintText: 'Type Your Task Title Here...',
+                      hintStyle: TextStyle(color: Colors.grey),
+                      border: InputBorder.none,
+                      isCollapsed: true,
                     ),
+                    style: const TextStyle(fontSize: 16),
+                  ),
+
                   ],
                 ),
               ),
@@ -622,6 +639,8 @@ class _SectionSelectorState extends State<SectionSelector> {
           }
 
           final section = widget.sections[index];
+          final isLight = section.color.computeLuminance() > 0.5;
+          final textColor = isLight ? Colors.black : Colors.white;
           final isSelected = section.id == widget.selectedSectionId;
 
           return GestureDetector(
@@ -644,17 +663,17 @@ class _SectionSelectorState extends State<SectionSelector> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                           Icon(
                             Icons.check,
                             size: 20,
-                            color: Colors.white,
+                            color: textColor,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             truncateToWords(section.name, 2),
-                            style: const TextStyle(
+                            style:  TextStyle(
                               fontSize: 16,
-                              color: Colors.white,
+                              color: textColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),

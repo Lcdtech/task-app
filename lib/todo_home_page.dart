@@ -138,6 +138,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
     });
   }
 
+  void _collapseAll() {
+  setState(() {
+    _expanded.updateAll((key, value) => false);
+    _allExpanded = false;
+  });
+}
+
   void _handleReorder(int oldIndex, int newIndex, String sectionId) {
     final sections = getAllSections();
     final sectionIndex = sections.indexWhere((s) => s.id == sectionId);
@@ -306,6 +313,19 @@ class _TodoHomePageState extends State<TodoHomePage> {
     );
   }
 
+  void _deleteTaskFromEdit(String sectionId, String taskId) {
+     final sections = getAllSections();
+                          final sectionIndex = sections.indexWhere((s) => s.id == sectionId);
+
+                          if (sectionIndex != -1) {
+                            setState(() {
+                              sections[sectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
+                              sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                               _collapseAll();
+                            });
+                          }
+  }
+
   void _editTask(String sectionId, String taskId, String currentText,
     DateTime currentDate) async {
   late List<Section> sections = getAllSections();
@@ -318,7 +338,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
         existingTask: currentText,
         existingDate: currentDate,
         existingSectionId: sectionId,
-        onDelete: () => _deleteTask(sectionId, taskId),
+        onDelete: () => _deleteTaskFromEdit(sectionId, taskId),
         onSectionCreated: (newSection) {
           setState(() {
             sections.add(newSection);
@@ -482,6 +502,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
       final tomorrow = today.add(const Duration(days: 1));
 
       final tasksByDate = <String, List<Map<String, dynamic>>>{};
+       bool hasTasks = false;
 
       for (final section in sections) {
         if (section.name == 'Completed' && !_shouldShowCompletedSection(sections)) {
@@ -512,9 +533,47 @@ class _TodoHomePageState extends State<TodoHomePage> {
             taskWithColor['sectionId'] = section.id;
             taskWithColor['completed'] = task['completed'] ?? false; 
             tasksByDate[category]!.add(taskWithColor);
+            hasTasks = true;
           }
         }
       }
+
+       // If no tasks found, return a centered message
+    if (!hasTasks) {
+      return [
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Image.asset(
+                //   'assets/images/completed.png', // You can use any appropriate image
+                //   width: 120,
+                //   height: 120,
+                // ),
+                const SizedBox(height: 16),
+                Text(
+                  'Your All Tasks are completed',
+                  style: AppTextStyles.header.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Great job! You have no pending tasks.',
+                  style: AppTextStyles.taskItem.copyWith(
+                    color: Colors.grey.shade600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
 
       final sortedCategories = tasksByDate.keys.toList()
         ..sort((a, b) {
@@ -707,6 +766,10 @@ class ColorFilterGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = trailingCount ?? items.length;
 
+    // Determine text color based on background color brightness
+    final isLight = color.computeLuminance() > 0.5;
+    final textColor = isLight ? Colors.black : Colors.white;
+
     return GestureDetector(
       onLongPress: onLongPress,
       child: AnimatedContainer(
@@ -728,49 +791,52 @@ class ColorFilterGroup extends StatelessWidget {
                 onTap: onToggle,
                 title: Text(
                   title,
-                  style: AppTextStyles.groupTitle,
+                  style: AppTextStyles.groupTitle.copyWith(color: textColor),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Text(
                   '$count',
-                  style: AppTextStyles.groupTitle.copyWith(fontSize: 16),
+                  style: AppTextStyles.groupTitle.copyWith(
+                    fontSize: 16,
+                    color: textColor,
+                  ),
                 ),
               ),
             ),
             if (showItems && isEditing)
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: items.length,
-                buildDefaultDragHandles: false,
-                onReorder: (oldIndex, newIndex) {
-                  if (onReorder != null) {
-                    onReorder!(oldIndex, newIndex);
-                  }
-                },
-                proxyDecorator:
-                  (Widget child, int index, Animation<double> animation) {
-                return Material(
-                  elevation: 0,
-                  color: Colors.transparent,
-                  child: child,
-                );
-              },
-                itemBuilder: (context, index) {
-                  final task = items[index];
-                  return ReorderableDragStartListener(
-                    key: Key(task['id']),
-                    index: index,
-                    child: Transform.translate(
-                      offset: Offset(0, isLast ? -15 : -25),
+              Transform.translate(
+                offset: Offset(0, isLast ? -15 : -25),
+                child: ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: items.length,
+                  buildDefaultDragHandles: false,
+                  onReorder: (oldIndex, newIndex) {
+                    if (onReorder != null) {
+                      onReorder!(oldIndex, newIndex);
+                    }
+                  },
+                  proxyDecorator: (Widget child, int index, Animation<double> animation) {
+                    return Material(
+                      elevation: 0,
+                      color: Colors.transparent,
+                      child: child,
+                    );
+                  },
+                  itemBuilder: (context, index) {
+                    final task = items[index];
+                    return ReorderableDragStartListener(
+                      key: Key(task['id']),
+                      index: index,
                       child: ColorFilterTaskItem(
                         text: task['text'] ?? '',
                         isLastTask: index == items.length - 1,
                         dueDate: task['dueDate'],
                         taskId: task['id'] ?? '',
                         sectionId: sectionId,
-                        sectionName: title, 
+                        taskItemColor:textColor,
+                        sectionName: title,
                         onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
                         onEdit: () {
                           final dueDate = task['dueDate'] != null
@@ -790,45 +856,48 @@ class ColorFilterGroup extends StatelessWidget {
                         isEditing: isEditing,
                         isDraggable: true,
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             if (showItems && !isEditing)
-              ...items.asMap().entries.map((entry) {
-                final index = entry.key;
-                final task = entry.value;
-                
-                return Transform.translate(
-                  key: Key(task['id']),
-                  offset: Offset(0, isLast ? -15 : -25),
-                  child: ColorFilterTaskItem(
-                    text: task['text'] ?? '',
-                    isLastTask: index == items.length - 1,
-                    dueDate: task['dueDate'],
-                    taskId: task['id'] ?? '',
-                    sectionId: sectionId,
-                    sectionName: title, 
-                    onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
-                    onEdit: () {
-                      final dueDate = task['dueDate'] != null
-                          ? DateTime.parse(task['dueDate'])
-                          : DateTime.now();
-                      onEditTask(
-                        sectionId,
-                        task['id'] ?? '',
-                        task['text'] ?? '',
-                        dueDate,
-                      );
-                    },
-                    onToggleComplete: (isCompleted) {
-                      onToggleComplete(task['id'], isCompleted);
-                    },
-                    completed: task['completed'] ?? false,
-                    isEditing: isEditing,
-                  ),
-                );
-              }).toList(),
+              Transform.translate(
+                offset: Offset(0, isLast ? -15 : -25),
+                child: Column(
+                  children: items.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final task = entry.value;
+
+                    return ColorFilterTaskItem(
+                      key: Key(task['id']),
+                      text: task['text'] ?? '',
+                      isLastTask: index == items.length - 1,
+                      dueDate: task['dueDate'],
+                      taskId: task['id'] ?? '',
+                      sectionId: sectionId,
+                      taskItemColor:textColor,
+                      sectionName: title,
+                      onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
+                      onEdit: () {
+                        final dueDate = task['dueDate'] != null
+                            ? DateTime.parse(task['dueDate'])
+                            : DateTime.now();
+                        onEditTask(
+                          sectionId,
+                          task['id'] ?? '',
+                          task['text'] ?? '',
+                          dueDate,
+                        );
+                      },
+                      onToggleComplete: (isCompleted) {
+                        onToggleComplete(task['id'], isCompleted);
+                      },
+                      completed: task['completed'] ?? false,
+                      isEditing: isEditing,
+                    );
+                  }).toList(),
+                ),
+              ),
           ],
         ),
       ),
@@ -955,12 +1024,14 @@ class ColorFilterTaskItem extends StatelessWidget {
   final bool isEditing;
   final bool isDraggable;
   final bool isLastTask;
+  final Color taskItemColor;
 
   const ColorFilterTaskItem({
     Key? key,
     required this.text,
     this.dueDate,
     required this.taskId,
+    required this.taskItemColor,
     required this.sectionId,
     required this.sectionName,
     required this.onDelete,
@@ -1004,7 +1075,7 @@ class ColorFilterTaskItem extends StatelessWidget {
                               padding: const EdgeInsets.only(right: 8),
                               child: Icon(
                                 Icons.drag_indicator,
-                                color: Colors.white,
+                                color: taskItemColor,
                                 size: 20,
                               ),
                             ),
@@ -1016,7 +1087,7 @@ class ColorFilterTaskItem extends StatelessWidget {
                             padding: const EdgeInsets.only(right: 8),
                             child: Icon(
                               Icons.drag_indicator,
-                              color: Colors.white,
+                              color: taskItemColor,
                               size: 20,
                             ),
                           ),
@@ -1050,7 +1121,7 @@ class ColorFilterTaskItem extends StatelessWidget {
                           Text(
                             text,
                             style: AppTextStyles.taskItem.copyWith(
-                              color: Colors.white,
+                              color: taskItemColor,
                               fontWeight: FontWeight.w500,
                               fontSize: 14,
                               decorationColor: Colors.white,
@@ -1073,10 +1144,10 @@ class ColorFilterTaskItem extends StatelessWidget {
                 bottom: 0,
                 child: Center(
                   child: IconButton(
-                    icon: const Icon(
+                    icon:  Icon(
                         CupertinoIcons.delete,
                         size: 16, // You can adjust the size
-                        color: Colors.white, // Change color as needed
+                        color: taskItemColor, // Change color as needed
                       ),
                     onPressed: onDelete,
                   ),

@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'styles.dart';
 import '../models/section.dart';
 import 'create_section_page.dart';
+import 'edit_section_page.dart';
 import 'package:flutter/cupertino.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -97,7 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 
                 if (exists) {
                   modalSetState(() {
-                    errorText = "Category with this name already exists";
+                    errorText = "Category with this name already exists.";
                   });
                   return;
                 }
@@ -121,6 +122,58 @@ class _SettingsPageState extends State<SettingsPage> {
   );
 }
   
+void _showEditSectionModal(Section section) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (modalContext) {
+      String? errorText;
+      
+      return StatefulBuilder(
+        builder: (context, modalSetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: EditSectionModal(
+              section: section,
+              errorText: errorText,
+              onError: (msg) => modalSetState(() => errorText = msg),
+              onSectionUpdated: (updatedSection) {
+                final exists = sections.any((s) => 
+                    s.id != updatedSection.id &&
+                    s.name.trim().toLowerCase() == 
+                    updatedSection.name.trim().toLowerCase());
+                
+                if (exists) {
+                  modalSetState(() {
+                    errorText = "Category with this name already exists.";
+                  });
+                  return;
+                }
+                
+                Navigator.of(modalContext).pop();
+                
+                if (mounted) {
+                  setState(() {
+                    final index = sections.indexWhere((s) => s.id == updatedSection.id);
+                    if (index != -1) {
+                      sections[index] = updatedSection;
+                      _saveSections();
+                    }
+                  });
+                }
+              },
+            ),
+          );
+        },
+      );
+    },
+  );
+}
   
 
   // void _deleteSection(int index) {
@@ -266,32 +319,31 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
   void _onReorder(int oldIndex, int newIndex) {
-    // Get only the reorderable sections
-    final reorderableSections =
-        sections.where((s) => s.name != "Completed").toList();
+  // Exclude "Completed" for reordering
+  final reorderableSections = sections.where((s) => s.name != "Completed").toList();
 
-    // Adjust indices for the reorderable list
-    final actualOldIndex = sections.indexOf(reorderableSections[oldIndex]);
+  // Map reorderable index to actual index in full sections list
+  final actualOldIndex = sections.indexOf(reorderableSections[oldIndex]);
 
-    // Calculate the actual new index in the full list
-    int actualNewIndex;
-    if (newIndex >= reorderableSections.length) {
-      // Dragged to the end of reorderable sections
-      actualNewIndex = sections.lastIndexWhere((s) => s.name == "Completed");
-    } else {
-      actualNewIndex = sections.indexOf(reorderableSections[newIndex]);
-      if (oldIndex < newIndex) {
-        // If moving down, the target index shifts by one less because an item is removed before insertion
-        actualNewIndex -= 1;
-      }
+  int actualNewIndex;
+  if (newIndex >= reorderableSections.length) {
+    // Insert at the last reorderable position (just before "Completed")
+    actualNewIndex = sections.length - 1;
+  } else {
+    actualNewIndex = sections.indexOf(reorderableSections[newIndex]);
+
+    // If moving downward, adjust for the removal shift
+    if (oldIndex < newIndex) {
+      actualNewIndex -= 1;
     }
-
-    setState(() {
-      final Section section = sections.removeAt(actualOldIndex);
-      sections.insert(actualNewIndex, section);
-      _saveSections();
-    });
   }
+
+  setState(() {
+    final section = sections.removeAt(actualOldIndex);
+    sections.insert(actualNewIndex, section);
+    _saveSections();
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -483,29 +535,29 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 12),
           Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 12),
-  child: SizedBox(
-    width: double.infinity,
-    height: 42,
-    child: TextButton.icon(
-      style: TextButton.styleFrom(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.black,
-        side: const BorderSide(color: Colors.black, width: 0.5),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(32),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: SizedBox(
+            width: double.infinity,
+            height: 42,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.black,
+                side: const BorderSide(color: Colors.black, width: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 0),
+              ),
+              onPressed: _showCreateSectionModal,
+              icon: const Icon(Icons.add, size: 20, color: Colors.black),
+              label: const Text(
+                'Create Category',
+                style: TextStyle(color: Colors.black),
+              ),
+            ),
+          ),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 0),
-      ),
-      onPressed: _showCreateSectionModal,
-      icon: const Icon(Icons.add, size: 20, color: Colors.black),
-      label: const Text(
-        'Create Category',
-        style: TextStyle(color: Colors.black),
-      ),
-    ),
-  ),
-),
           Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12,vertical:12),
                   child: Container(
@@ -534,24 +586,23 @@ class _SettingsPageState extends State<SettingsPage> {
               _FiltersBar(
                 selectedFilters: {currentFilter},
                 onFilterToggle: (filter) {
-                  setState(() {
-                    currentFilter = filter; // update live
-
-                    final index =
-                        sections.indexWhere((s) => s.name == 'Completed');
-                    if (index != -1) {
-                      final original = sections[index];
-                      sections[index] = Section(
-                        id: original.id,
-                        name: original.name,
-                        color: original.color,
-                        tasks: original.tasks,
-                        isFixed: filter == 'Show',
-                      );
-                      _saveSections();
-                    }
-                  });
-                },
+                setState(() {
+                  currentFilter = filter;
+                  final index = sections.indexWhere((s) => s.name == 'Completed');
+                  if (index != -1) {
+                    final original = sections[index];
+                    sections[index] = Section(
+                      id: original.id,
+                      name: original.name,
+                      color: original.color,
+                      tasks: original.tasks,
+                      isFixed: filter == 'Show',
+                    );
+                    _saveSections();
+                  }
+                });
+              },
+                completedSection: sections.firstWhere((s) => s.name == 'Completed'),
               ),
             ],
           )
@@ -563,6 +614,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildTile(int index, Section section) {
+    final isLight = section.color.computeLuminance() > 0.5;
+    final textColor = isLight ? Colors.black : Colors.white;
   return Material(
     key: ValueKey(section.id),
     elevation: 4,
@@ -577,27 +630,35 @@ class _SettingsPageState extends State<SettingsPage> {
             mainAxisAlignment: MainAxisAlignment.center,  // Centers the row contents
             children: [
               const SizedBox(width: 16),
-              const Icon(Icons.drag_indicator, color: Colors.white),
+              Icon(Icons.drag_indicator, color: textColor),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   section.name,
-                  style: AppTextStyles.groupTitle,
+                  style: AppTextStyles.groupTitle.copyWith(color:textColor),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   //textAlign: TextAlign.center,  // Centers the text
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 8),          
               IconButton(
-                icon: const Icon(
+                icon: Icon(
+                Icons.edit,
+                color: textColor,
+                size:16
+                ),
+                onPressed: () => _showEditSectionModal(section),
+              ),
+              IconButton(
+                icon:  Icon(
                         CupertinoIcons.delete,
                         size: 16, // You can adjust the size
-                        color: Colors.white, // Change color as needed
+                        color: textColor, // Change color as needed
                       ),
                 onPressed: () => _deleteSection(sections.indexOf(section)),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
             ],
           ),
         ),
@@ -610,11 +671,13 @@ class _SettingsPageState extends State<SettingsPage> {
 class _FiltersBar extends StatefulWidget {
   final Set<String> selectedFilters;
   final void Function(String) onFilterToggle;
+  final Section completedSection;  
 
   const _FiltersBar({
     Key? key,
     required this.selectedFilters,
     required this.onFilterToggle,
+    required this.completedSection, 
   }) : super(key: key);
 
   @override
@@ -624,6 +687,7 @@ class _FiltersBar extends StatefulWidget {
 class __FiltersBarState extends State<_FiltersBar> {
   final List<String> labels = ['Hide', 'Show'];
   final List<IconData> icons = [Icons.visibility_off, Icons.visibility];
+  
 
   @override
   Widget build(BuildContext context) {
@@ -659,55 +723,127 @@ class __FiltersBarState extends State<_FiltersBar> {
   }
 
   Widget _buildToggleSegment() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(30),
-      ),
-      padding: const EdgeInsets.all(2),
-      child: Row(
-        children: List.generate(labels.length, (index) {
-          final label = labels[index];
-          final isSelected = widget.selectedFilters.contains(label);
-          return GestureDetector(
-            onTap: () => widget.onFilterToggle(label),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    icons[index],
-                    size: 16,
-                    color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
+  // Get the current state from the completed section
+  final currentState = widget.completedSection.isFixed ? 'Show' : 'Hide';
+  
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.grey.shade200,
+      borderRadius: BorderRadius.circular(30),
+    ),
+    padding: const EdgeInsets.all(2),
+    child: Row(
+      children: List.generate(labels.length, (index) {
+        final label = labels[index];
+        final isSelected = currentState == label; // Use the actual state
+        return GestureDetector(
+          onTap: () => widget.onFilterToggle(label),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icons[index],
+                  size: 16,
+                  color: isSelected ? Colors.deepPurple : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: AppTextStyles.chipText.copyWith(
+                    color: isSelected ? Colors.black : Colors.grey.shade600,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    label,
-                    style: AppTextStyles.chipText.copyWith(
-                      color: isSelected ? Colors.black : Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    ),
+  );
+}
+
+  void _showEditSectionModal() {
+  final section = widget.completedSection;
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (modalContext) {
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(modalContext).viewInsets.bottom,
+        ),
+        child: EditSectionModal(
+          section: section,
+          errorText: null,
+          onError: (msg) {},
+          onSectionUpdated: (updatedSection) {
+            // This will trigger a rebuild of the parent widget
+            widget.onFilterToggle(updatedSection.isFixed ? 'Show' : 'Hide');
+            
+            // Find and update the section in the main list
+            final parentContext = context;
+            if (parentContext.mounted) {
+              final parentState = parentContext.findAncestorStateOfType<_SettingsPageState>();
+              parentState?.setState(() {
+                final index = parentState.sections.indexWhere((s) => s.id == updatedSection.id);
+                if (index != -1) {
+                  parentState.sections[index] = updatedSection;
+                  parentState._saveSections();
+                }
+              });
+            }
+            
+            Navigator.pop(modalContext);
+          },
+        ),
+      );
+    },
+  );
+}
+
+   Widget _buildExpandChip() {
+    final isLight = widget.completedSection.color.computeLuminance() > 0.5;
+    final textColor = isLight ? Colors.black : Colors.white;
+
+    return GestureDetector(
+      onTap: _showEditSectionModal,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: widget.completedSection.color,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.grey.shade400),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Completed List',
+              style: AppTextStyles.header.copyWith(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          );
-        }),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.edit,
+              size: 16,
+              color: textColor,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildExpandChip() {
-    return Text(
-      'Completed List',
-      style: AppTextStyles.header.copyWith(
-        color: Colors.black,
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
+
 }

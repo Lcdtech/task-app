@@ -7,7 +7,7 @@ class AppColors {
   static const important = Color(0xFF5C6BC0);
   static const doThisLater = Color(0xFF64B5F6);
   static const kindOfImportant = Color(0xFFBA68C8);
-  static const complete = Color(0xFF2E7D32);
+  static const complete = Colors.grey;
   static const lightGrey = Color(0xFFF5F5F5);
   static const black = Colors.black;
   static const white = Colors.white;

@@ -51,6 +51,7 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
   @override
   void initState() {
     super.initState();
+    _errorMessage = widget.errorText;
     _nameController.addListener(() {
       final isNotEmpty = _nameController.text.trim().isNotEmpty;
       if (_isButtonEnabled != isNotEmpty) {
@@ -62,13 +63,26 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
   }
 
   @override
+void didUpdateWidget(covariant CreateSectionModal oldWidget) {
+  super.didUpdateWidget(oldWidget);
+  if (widget.errorText != oldWidget.errorText) {
+    setState(() {
+      _errorMessage = widget.errorText;
+    });
+  }
+}
+
+  @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
   }
 
+  
   @override
   Widget build(BuildContext context) {
+     final isLight = _selectedColor.computeLuminance() > 0.5;
+     final textColor = isLight ? Colors.black : Colors.white;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
       child: Column(
@@ -131,21 +145,44 @@ class _CreateSectionModalState extends State<CreateSectionModal> {
           ),
           child: Center(
             child: TextField(
-              controller: _nameController,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 1,
-              decoration: const InputDecoration(
-                hintText: 'Type Category title here...',
-                hintStyle: TextStyle(color: Colors.white),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16), // No vertical padding needed
-              ),
-              onChanged: (_) {
-                if (_errorMessage != null) {
-                  setState(() => _errorMessage = null);
-                }
-                widget.onError?.call('');
-              },
+            controller: _nameController,
+            style:  TextStyle(color: textColor),
+            maxLines: 1,
+            decoration:  InputDecoration(
+              hintText: 'Type Category title here...',
+              hintStyle: TextStyle(color: textColor),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 16),
+            ),
+            onChanged: (text) {
+              // Capitalize first character if needed
+              if (text.isNotEmpty && text[0] != text[0].toUpperCase()) {
+                final capitalized = text[0].toUpperCase() + text.substring(1);
+                final cursorPos = _nameController.selection;
+
+                _nameController.value = TextEditingValue(
+                  text: capitalized,
+                  selection: cursorPos,
+                );
+              }
+
+              // Clear error message if any
+              if (_errorMessage != null) {
+                setState(() => _errorMessage = null);
+              }
+              widget.onError?.call('');
+            },
+          ),
+          ),
+        ),
+        if (_errorMessage != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _errorMessage!,
+            style: const TextStyle(
+              color: Colors.red,
+              fontSize: 13,
             ),
           ),
         ),
