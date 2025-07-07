@@ -138,6 +138,21 @@ class _TodoHomePageState extends State<TodoHomePage> {
     });
   }
 
+  void _collapseAllExceptDateGroup(String groupId) {
+  setState(() {
+    // Collapse all date groups
+    _expanded.forEach((key, value) {
+      if (key.startsWith('date_')) {
+        _expanded[key] = false;
+      }
+    });
+    
+    // Expand the specified date group
+    _expanded[groupId] = true;
+    _allExpanded = false;
+  });
+}
+
   void _collapseAll() {
   setState(() {
     _expanded.updateAll((key, value) => false);
@@ -162,41 +177,63 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   void _navigateToAddTask() async {
-    late List<Section> sections = getAllSections();
+  late List<Section> sections = getAllSections();
 
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddTaskPage(
-          sections: sections,
-          onSectionCreated: (newSection) {
-            setState(() {
-              sections.add(newSection);
-              sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-            });
-          },
-        ),
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => AddTaskPage(
+        sections: sections,
+        onSectionCreated: (newSection) {
+          setState(() {
+            sections.add(newSection);
+            sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+          });
+        },
       ),
-    );
+    ),
+  );
 
-    if (result != null && result is Map<String, dynamic>) {
-      final selectedSectionId = result['sectionId'];
-      final newTask = result['task'];
-      final dueDate = result['dueDate'];
+  if (result != null && result is Map<String, dynamic>) {
+    final selectedSectionId = result['sectionId'];
+    final newTask = result['task'];
+    final dueDate = result['dueDate'];
 
-      final index = sections.indexWhere((s) => s.id == selectedSectionId);
-      if (index != -1) {
-        sections[index].tasks.add({
-          'id': const Uuid().v4(),
-          'text': newTask,
-          'dueDate': dueDate,
-          'completed': false,
-        });
-        sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+    final index = sections.indexWhere((s) => s.id == selectedSectionId);
+    if (index != -1) {
+      sections[index].tasks.add({
+        'id': const Uuid().v4(),
+        'text': newTask,
+        'dueDate': dueDate,
+        'completed': false,
+      });
+      sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+      
+      // Handle collapse based on current filter
+      if (currentFilter == 'Color') {
         _collapseAllExcept(selectedSectionId);
+      } else if (dueDate != null) {
+        final date = DateTime.parse(dueDate);
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final tomorrow = today.add(const Duration(days: 1));
+        
+        String category;
+        if (date.isBefore(tomorrow)) {
+          category = 'Today';
+        } else if (date.isBefore(tomorrow.add(const Duration(days: 1)))) {
+          category = 'Tomorrow';
+        } else if (date.year == now.year && date.month == now.month) {
+          category = DateFormat('d MMMM y').format(date);
+        } else {
+          category = DateFormat('MMMM y').format(date);
+        }
+        
+        _collapseAllExceptDateGroup('date_$category');
       }
     }
   }
+}
 
   void _deleteTask(String sectionId, String taskId) {
     showModalBottomSheet(
@@ -262,6 +299,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             setState(() {
                               sections[sectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
                               sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                              _collapseAllExcept(sectionId);
                             });
                           }
                           Navigator.pop(context);
@@ -321,13 +359,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             setState(() {
                               sections[sectionIndex].tasks.removeWhere((task) => task['id'] == taskId);
                               sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-                               _collapseAll();
+                               _collapseAllExcept(sectionId);
                             });
                           }
   }
 
-  void _editTask(String sectionId, String taskId, String currentText,
-    DateTime currentDate) async {
+ void _editTask(String sectionId, String taskId, String currentText,
+  DateTime currentDate) async {
   late List<Section> sections = getAllSections();
 
   final result = await Navigator.push(
@@ -382,7 +420,29 @@ class _TodoHomePageState extends State<TodoHomePage> {
       }
 
       sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-      _collapseAllExcept(selectedSectionId);
+      
+      // Handle collapse based on current filter
+      if (currentFilter == 'Color') {
+        _collapseAllExcept(selectedSectionId);
+      } else if (dueDate != null) {
+        final date = DateTime.parse(dueDate);
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final tomorrow = today.add(const Duration(days: 1));
+        
+        String category;
+        if (date.isBefore(tomorrow)) {
+          category = 'Today';
+        } else if (date.isBefore(tomorrow.add(const Duration(days: 1)))) {
+          category = 'Tomorrow';
+        } else if (date.year == now.year && date.month == now.month) {
+          category = DateFormat('d MMMM y').format(date);
+        } else {
+          category = DateFormat('MMMM y').format(date);
+        }
+        
+        _collapseAllExceptDateGroup('date_$category');
+      }
     }
   }
 }
@@ -430,6 +490,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
             if (!completedSection.tasks.any((task) => task['id'] == taskToMove['id'])) {
               completedSection.tasks.insert(0, taskToMove);
             }
+            _collapseAllExcept(completedSection.id);
+
           } else {
             final completedSectionIndex = sections.indexWhere((s) => s.name == 'Completed');
             if (completedSectionIndex != -1) {
@@ -444,6 +506,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
             }
           }
           sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+          //_collapseAllExcept(completedSection);
         });
       }
     }
@@ -490,6 +553,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
             onLongPress: () => _toggleSectionEditMode(visibleSections[i].id),
             onToggleComplete: (taskId, isCompleted) {
               _toggleTaskCompletion(visibleSections[i].id, taskId, isCompleted);
+
             },
             onReorder: (oldIndex, newIndex) {
               _handleReorder(oldIndex, newIndex, visibleSections[i].id);
@@ -997,6 +1061,11 @@ class DateFilterGroup extends StatelessWidget {
                       task['text'] ?? '',
                       dueDate,
                     );
+                    // Call the specific date group collapse function
+                    if (context.mounted) {
+                      final state = context.findAncestorStateOfType<_TodoHomePageState>();
+                      state?._collapseAllExceptDateGroup('date_$title');
+                    }
                   },
                   onToggleComplete: (isCompleted) {
                     onToggleComplete(task['id'], isCompleted);
@@ -1096,6 +1165,7 @@ class ColorFilterTaskItem extends StatelessWidget {
                       CustomCheckbox(
                         isChecked: sectionName == "Completed" ? true : completed,
                         isDateGroup: false,
+                        checkBoxColor:taskItemColor!,
                         onTap: () {
                           onToggleComplete(!completed);
                         },
@@ -1107,6 +1177,7 @@ class ColorFilterTaskItem extends StatelessWidget {
                           child: CustomCheckbox(
                             isChecked: true,
                             isDateGroup: false,
+                            checkBoxColor:taskItemColor!,
                             onTap: () {},
                           ),
                         ),
@@ -1250,6 +1321,7 @@ class DateFilterTaskItem extends StatelessWidget {
                 CustomCheckbox(
                   isChecked: completed,
                   isDateGroup: true,
+                  checkBoxColor:null,
                   onTap: () {
                     onToggleComplete(!completed);
                   },
@@ -1459,11 +1531,14 @@ class __FiltersBarState extends State<_FiltersBar> {
             children: [
               SizedBox(
                 width: 16,
+                child: Transform.rotate(
+                angle: 1.5708, // 180 degrees in radians (pi)
                 child: Icon(
-                        CupertinoIcons.arrow_up_arrow_down,
-                        size: 16, // You can adjust the size
-                        color: Colors.black, // Change color as needed
-                      ),
+                  CupertinoIcons.arrow_up_left_arrow_down_right,
+                  size: 12,
+                  color: Colors.black,
+                ),
+              ),
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -1511,18 +1586,26 @@ class CustomCheckbox extends StatelessWidget {
   final bool isChecked;
   final VoidCallback onTap;
   final bool isDateGroup;
+  final Color? checkBoxColor;
 
   const CustomCheckbox({
     Key? key,
     required this.isChecked,
     required this.onTap,
     required this.isDateGroup,
+    required this.checkBoxColor
   }) : super(key: key);
+
+  bool _colorsEqual(Color? color1, Color color2) {
+    if (color1 == null) return false;
+    return color1.value == color2.value;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = isDateGroup ? Colors.transparent : Colors.white;
-    final checkColor = isDateGroup ? Colors.black : Colors.white;
+    final isBlack = _colorsEqual(checkBoxColor, Color(0xff000000));
+    final borderColor = isDateGroup || isBlack  ? Colors.transparent : Colors.white;
+    final checkColor = isDateGroup || isBlack  ? Colors.black : Colors.white;
 
     return GestureDetector(
       onTap: onTap,
@@ -1532,7 +1615,7 @@ class CustomCheckbox extends StatelessWidget {
         decoration: BoxDecoration(
           color: isChecked 
               ?  Colors.transparent
-              : (isDateGroup ? Colors.grey[400] : Colors.white),
+              : (isDateGroup || isBlack ? Colors.grey[400] : Colors.white),
           border: Border.all(
             color: borderColor,
             width: 1.6,
