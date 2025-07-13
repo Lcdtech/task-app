@@ -11,6 +11,7 @@ import 'add_task_page.dart';
 import '../models/section.dart';
 import 'overlapping_task_list.dart';
 import 'package:flutter/cupertino.dart';
+import 'tab_button.dart';
 
 class TodoHomePage extends StatefulWidget {
   const TodoHomePage({Key? key}) : super(key: key);
@@ -20,6 +21,7 @@ class TodoHomePage extends StatefulWidget {
 }
 
 class _TodoHomePageState extends State<TodoHomePage> {
+  String selectedTab = 'Open'; // 'Open' or 'Completed'
   int? completedIndex;
   late Box sectionBox;
   final Map<String, bool> _expanded = {};
@@ -580,11 +582,18 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   List<Widget> _buildTaskGroups(List<Section> sections) {
-  final visibleSections = sections.where((section) {
-    return !(section.name == 'Completed' && !_shouldShowCompletedSection(sections));
-  }).toList();
-
+  // Tab filtering logic for Color filter
+  List<Section> visibleSections = sections;
   if (currentFilter == 'Color') {
+    if (_shouldShowCompletedSection(sections)) {
+      if (selectedTab == 'Open') {
+        visibleSections = sections.where((section) => section.name != 'Completed').toList();
+      } else {
+        visibleSections = sections.where((section) => section.name == 'Completed').toList();
+      }
+    } else {
+      visibleSections = sections.where((section) => section.name != 'Completed').toList();
+    }
     return [
       for (int i = 0; i < visibleSections.length; i++)
         ColorFilterGroup(
@@ -763,12 +772,21 @@ class _TodoHomePageState extends State<TodoHomePage> {
       valueListenable: sectionBox.listenable(),
       builder: (context, Box box, _) {
         final sections = getAllSections();
-        final visibleSections = sections.where((section) {
-          return !(section.name == 'Completed' && !_shouldShowCompletedSection(sections));
-        }).toList();
-
-        bool shouldShowEmptyState = visibleSections.isEmpty ||
-            visibleSections.every((section) => section.tasks.isEmpty);
+        // For tab counts
+        final openSections = sections.where((section) => section.name != 'Completed').toList();
+        final completedSection = sections.where((section) => section.name == 'Completed').toList();
+        // For empty state, use Open/Completed tab logic
+        bool shouldShowEmptyState = false;
+        if (currentFilter == 'Color' && _shouldShowCompletedSection(sections)) {
+          if (selectedTab == 'Open') {
+            shouldShowEmptyState = openSections.isEmpty || openSections.every((section) => section.tasks.isEmpty);
+          } else {
+            shouldShowEmptyState = completedSection.isEmpty || completedSection.every((section) => section.tasks.isEmpty);
+          }
+        } else {
+          final visibleSections = sections.where((section) => !(section.name == 'Completed' && !_shouldShowCompletedSection(sections))).toList();
+          shouldShowEmptyState = visibleSections.isEmpty || visibleSections.every((section) => section.tasks.isEmpty);
+        }
 
         if (shouldShowEmptyState) {
           return Scaffold(
@@ -777,6 +795,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
               child: Column(
                 children: [
                   const _Header(),
+                 
                   Expanded(
                     child: Center(
                       child: Column(
@@ -822,6 +841,39 @@ class _TodoHomePageState extends State<TodoHomePage> {
             child: Column(
               children: [
                 const _Header(),
+                if (currentFilter == 'Color' && _shouldShowCompletedSection(sections))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, left: 0, right: 0, bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TabButton(
+                            label: 'Open',
+                            count: openSections.fold<int>(0, (sum, s) => sum + s.tasks.length),
+                            selected: selectedTab == 'Open',
+                            onTap: () {
+                              setState(() {
+                                selectedTab = 'Open';
+                              });
+                            },
+                          ),
+                        ),
+                       // const SizedBox(width: 12),
+                        Expanded(
+                          child: TabButton(
+                            label: 'Completed',
+                            count: completedSection.isNotEmpty ? completedSection.first.tasks.length : 0,
+                            selected: selectedTab == 'Completed',
+                            onTap: () {
+                              setState(() {
+                                selectedTab = 'Completed';
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 Expanded(
                   child: GestureDetector(
                     onTap: _exitEditMode,
