@@ -186,135 +186,166 @@ void _showEditSectionModal(Section section) {
   // }
 
   void _deleteSection(int index) {
+  // Check if there are other sections besides this one and "Completed"
+  bool hasOtherSections = sections.length > 2 || 
+                         (sections.length == 2 && index != 0);
+  
+  // Determine target section: next if possible, else previous
+  int targetIndex = index < sections.length - 2 ? index + 1 : (index > 0 ? index - 1 : -1);
+  Section? targetSection = targetIndex >= 0 && targetIndex < sections.length ? sections[targetIndex] : null;
+  bool moveTasks = false; // Default to false for checkbox
+
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => Container(
-      padding: const EdgeInsets.only(left: 8,right:8, top: 16,bottom:0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // White Modal Card with content
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            padding: const EdgeInsets.only(left: 0,right:0, top: 0,bottom:0),
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: const EdgeInsets.only(left: 8, right: 8, top: 16, bottom: 0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Icon
-                Image.asset(
-                            'assets/images/delete.png',
-                            width: 154,
-                            height: 154,
-                          ),
-
-                
-
-                // Title
-                const Text(
-                  'Delete this Category?',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black,
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                // Subtitle
-                const Padding(
-                padding: EdgeInsets.symmetric(horizontal:20), // You can adjust this value
-                child: Text(
-                  "Once deleted, you'll no longer see this category & it's tasks",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.black,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-
-                const SizedBox(height: 24),
-
-              
-               // Yes, Delete Button (flat with black top border)
-              SizedBox(
-                width: double.infinity,
-                child: Container(
+                // White Modal Card with content
+                Container(
                   decoration: const BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: Colors.black12, width: 1), // ✅ thin top border
-                    ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   ),
-                  padding: EdgeInsets.symmetric(vertical:10),
-                  child: TextButton(
-                    onPressed: () {
-                       if (sections[index].isFixed) return;
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/images/delete.png',
+                        width: 154,
+                        height: 154,
+                      ),
+                      const Text(
+                        'Delete this Category?',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          hasOtherSections 
+                            ? "Once deleted, you'll no longer see this category & its tasks, so please move tasks by clicking the checkbox below."
+                            : "This is the only category. Deleting it will permanently remove all tasks.",
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.black,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Only show move tasks option if there are other sections
+                      if (hasOtherSections) Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: moveTasks,
+                              onChanged: (value) {
+                                setModalState(() {
+                                  moveTasks = value ?? false;
+                                });
+                              },
+                              activeColor: Colors.black,
+                            ),
+                            Text(
+                              targetIndex == index + 1
+                                  ? "Move tasks to next category"
+                                  : "Move tasks to previous category",
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                        setState(() {
-                          sections.removeAt(index);
-                          _saveSections();
-                        });
-                       Navigator.pop(context);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      foregroundColor: Colors.red,
-                      textStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.normal,
+                      const SizedBox(height: 16),
+                      
+                      // Yes, Delete Button
+                      Container(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: Colors.black12, width: 1),
+                          ),
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: () {
+                              if (sections[index].isFixed) return;
+
+                              if (hasOtherSections && moveTasks && targetSection != null) {
+                                final tasksToMove = sections[index].tasks;
+                                if (tasksToMove.isNotEmpty) {
+                                  targetSection.tasks.addAll(tasksToMove);
+                                }
+                              }
+
+                              setState(() {
+                                sections.removeAt(index);
+                                _saveSections();
+                              });
+                              Navigator.pop(context);
+                            },
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              foregroundColor: Colors.red,
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                            child: const Text('Yes, Delete'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Cancel button
+                SizedBox(
+                  width: double.infinity,
+                  child: Material(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      child: const Text(
+                        'No, Cancel',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.black,
+                        ),
                       ),
                     ),
-                    child: const Text('Yes, Delete'),
                   ),
                 ),
-              ),
-              
-
+                const SizedBox(height: 8),
               ],
             ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Cancel button below with transparent background between
-                    SizedBox(
-            width: double.infinity,
-            child: Material(
-              color: Colors.white, // ✅ Force background color here
-              borderRadius: BorderRadius.circular(12),
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  side: BorderSide(color: Colors.grey[300]!),
-                ),
-                child: const Text(
-                  'No, Cancel',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-
-
-          const SizedBox(height: 8), // Space from bottom
-        ],
-      ),
-    ),
+          );
+        },
+      );
+    },
   );
 }
 

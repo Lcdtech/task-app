@@ -182,9 +182,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
     
     if (sectionIndex != -1) {
       final tasks = sections[sectionIndex].tasks;
-      if (oldIndex < newIndex) {
-        newIndex -= 1;
-      }
       final task = tasks.removeAt(oldIndex);
       tasks.insert(newIndex, task);
       sectionBox.put('list', sections.map((s) => s.toMap()).toList());
@@ -211,12 +208,14 @@ class _TodoHomePageState extends State<TodoHomePage> {
   // Remove from old section
   sections[fromIndex].tasks.removeAt(taskIdx);
 
-  // Set completed property and insert in correct position
+  // Store original section ID when moving to Completed
   if (sections[toIndex].name == 'Completed') {
     task['completed'] = true;
+    task['originalSectionId'] = fromSectionId;
     sections[toIndex].tasks.insert(0, task); // insert at top
   } else {
     task['completed'] = false;
+    task.remove('originalSectionId');
     sections[toIndex].tasks.add(task); // add at bottom
   }
 
@@ -538,28 +537,47 @@ class _TodoHomePageState extends State<TodoHomePage> {
           taskToMove['completed'] = isCompleted;
 
           if (isCompleted) {
+            // Move to Completed section
             sections[currentSectionIndex].tasks.removeAt(taskIndex);
+            taskToMove['originalSectionId'] = sectionId;
             final completedSection = _getOrCreateCompletedSection(sections);
             if (!completedSection.tasks.any((task) => task['id'] == taskToMove['id'])) {
               completedSection.tasks.insert(0, taskToMove);
             }
             _collapseAllExcept(completedSection.id);
-
           } else {
+            // Move back to original section if available
             final completedSectionIndex = sections.indexWhere((s) => s.name == 'Completed');
             if (completedSectionIndex != -1) {
               final completedTaskIndex = sections[completedSectionIndex].tasks.indexWhere(
                 (task) => task['id'] == taskId,
               );
               if (completedTaskIndex != -1) {
-                sections[completedSectionIndex].tasks[completedTaskIndex]['completed'] = isCompleted;
+                final originalSectionId = sections[completedSectionIndex].tasks[completedTaskIndex]['originalSectionId'];
+                if (originalSectionId != null) {
+                  // Remove from completed
+                  final task = Map<String, dynamic>.from(sections[completedSectionIndex].tasks.removeAt(completedTaskIndex));
+                  task['completed'] = false;
+                  task.remove('originalSectionId');
+                  final originalSectionIndex = sections.indexWhere((s) => s.id == originalSectionId);
+                  if (originalSectionIndex != -1) {
+                    sections[originalSectionIndex].tasks.add(task);
+                    _collapseAllExcept(originalSectionId);
+                  } else {
+                    // If original section not found, add back to current section
+                    sections[currentSectionIndex].tasks.add(task);
+                    _collapseAllExcept(sectionId);
+                  }
+                } else {
+                  // If no originalSectionId, just uncheck in place
+                  sections[completedSectionIndex].tasks[completedTaskIndex]['completed'] = isCompleted;
+                }
               }
             } else {
               sections[currentSectionIndex].tasks[taskIndex]['completed'] = isCompleted;
             }
           }
           sectionBox.put('list', sections.map((s) => s.toMap()).toList());
-          //_collapseAllExcept(completedSection);
         });
       }
     }
@@ -599,7 +617,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
         ColorFilterGroup(
           key: ValueKey(visibleSections[i].id),
           id: visibleSections[i].id,
-          title: visibleSections[i].name,
+          title: visibleSections[i].name == "Completed" ? "Completed Tasks" : visibleSections[i].name,
           color: visibleSections[i].color,
           items: visibleSections[i].tasks,
           showItems: _expanded[visibleSections[i].id] ?? true,
@@ -637,10 +655,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
       if (section.name == 'Completed' && !_shouldShowCompletedSection(sections)) {
         continue;
       }
-      
       for (final task in section.tasks) {
         if (task['completed'] == true) continue;
-        
         if (task['dueDate'] != null) {
           final dueDate = DateTime.parse(task['dueDate']);
           final taskWithColor = Map<String, dynamic>.from(task);
@@ -649,11 +665,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
           taskWithColor['completed'] = task['completed'] ?? false;
 
           if (dueDate.isBefore(today)) {
-            // Add to past tasks
             pastTasks.add(taskWithColor);
             hasTasks = true;
           } else {
-            // Categorize future tasks as before
             String category;
             if (dueDate.isBefore(tomorrow)) {
               category = 'Today';
@@ -678,7 +692,15 @@ class _TodoHomePageState extends State<TodoHomePage> {
       tasksByDate['Overdue Tasks'] = pastTasks;
     }
 
-    // If no tasks found, return a centered message
+    // Sort each date group by due time
+    for (final entry in tasksByDate.entries) {
+      entry.value.sort((a, b) {
+        final aDate = a['dueDate'] != null ? DateTime.parse(a['dueDate']) : DateTime(2100);
+        final bDate = b['dueDate'] != null ? DateTime.parse(b['dueDate']) : DateTime(2100);
+        return aDate.compareTo(bDate);
+      });
+    }
+
     if (!hasTasks) {
       return [
         Center(
@@ -715,7 +737,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
         // Overdue should always come first
         if (a == 'Overdue Tasks') return -1;
         if (b == 'Overdue Tasks') return 1;
-        
         if (a == 'Today') return -1;
         if (b == 'Today') return 1;
         if (a == 'Tomorrow') return -1;
@@ -777,12 +798,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
         final completedSection = sections.where((section) => section.name == 'Completed').toList();
         // For empty state, use Open/Completed tab logic
         bool shouldShowEmptyState = false;
-        if (currentFilter == 'Color' && _shouldShowCompletedSection(sections)) {
-          if (selectedTab == 'Open') {
-            shouldShowEmptyState = openSections.isEmpty || openSections.every((section) => section.tasks.isEmpty);
-          } else {
-            shouldShowEmptyState = completedSection.isEmpty || completedSection.every((section) => section.tasks.isEmpty);
-          }
+        if (_shouldShowCompletedSection(sections)) {
+          // If any section (including Completed) has at least one task, set false
+          final hasAnyTask = sections.any((section) => section.tasks.isNotEmpty);
+          shouldShowEmptyState = !hasAnyTask;
         } else {
           final visibleSections = sections.where((section) => !(section.name == 'Completed' && !_shouldShowCompletedSection(sections))).toList();
           shouldShowEmptyState = visibleSections.isEmpty || visibleSections.every((section) => section.tasks.isEmpty);
@@ -795,7 +814,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
               child: Column(
                 children: [
                   const _Header(),
-                 
                   Expanded(
                     child: Center(
                       child: Column(
@@ -858,7 +876,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             },
                           ),
                         ),
-                       // const SizedBox(width: 12),
                         Expanded(
                           child: TabButton(
                             label: 'Completed',
@@ -872,6 +889,131 @@ class _TodoHomePageState extends State<TodoHomePage> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                if (currentFilter == 'Color' && _shouldShowCompletedSection(sections) && selectedTab == 'Completed' && completedSection.isNotEmpty && completedSection.first.tasks.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        ),
+                        icon: const Icon(Icons.delete),
+                        label: const Text('Delete All Completed Tasks'),
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => Container(
+                              padding: const EdgeInsets.only(left: 8,right:8, top: 16,bottom:0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                    padding: const EdgeInsets.only(left: 0,right:0, top: 0,bottom:0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Image.asset(
+                                          'assets/images/delete.png',
+                                          width: 154,
+                                          height: 154,
+                                        ),
+                                        const Text(
+                                          'Delete all completed tasks?',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal:20),
+                                          child: Text(
+                                            "Once deleted, you'll no longer see these tasks in your completed list.",
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w400,
+                                              color: Colors.black,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 24),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: Container(
+                                            decoration: const BoxDecoration(
+                                              border: Border(
+                                                top: BorderSide(color: Colors.black12, width: 1),
+                                              ),
+                                            ),
+                                            padding: EdgeInsets.symmetric(vertical:10),
+                                            child: TextButton(
+                                              onPressed: () {
+                                                setState(() {
+                                                  completedSection.first.tasks.clear();
+                                                  sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+                                                });
+                                                Navigator.pop(context);
+                                              },
+                                              style: TextButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                                foregroundColor: Colors.red,
+                                                textStyle: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                              ),
+                                              child: const Text('Yes, Delete All'),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: Material(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: OutlinedButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(vertical: 24),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          side: BorderSide(color: Colors.grey[300]!),
+                                        ),
+                                        child: const Text(
+                                          'No, Cancel',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 Expanded(
@@ -954,13 +1096,25 @@ class ColorFilterGroup extends StatelessWidget {
     final isLight = color.computeLuminance() > 0.5;
     final textColor = isLight ? Colors.black : Colors.white;
 
+    // Unified drag-and-drop for both intra-section and inter-section
     return DragTarget<Map<String, String>>(
-      onWillAccept: (data) {
-        return data != null && data['fromSectionId'] != sectionId;
-      },
+      onWillAccept: (data) => data != null,
       onAccept: (data) {
-        if (onMoveTask != null && data['fromSectionId'] != null && data['taskId'] != null) {
-          onMoveTask!(data['fromSectionId']!, sectionId, data['taskId']!);
+        if (data != null && data['fromSectionId'] != null && data['taskId'] != null) {
+          if (data['fromSectionId'] == sectionId) {
+            // Intra-section reorder: move to end
+            if (onReorder != null) {
+              final oldIndex = items.indexWhere((t) => t['id'] == data['taskId']);
+              if (oldIndex != -1) {
+                onReorder!(oldIndex, items.length - 1);
+              }
+            }
+          } else {
+            // Inter-section move
+            if (onMoveTask != null) {
+              onMoveTask!(data['fromSectionId']!, sectionId, data['taskId']!);
+            }
+          }
         }
       },
       builder: (context, candidateData, rejectedData) {
@@ -999,84 +1153,95 @@ class ColorFilterGroup extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (showItems && isEditing)
-                  Transform.translate(
-                    offset: Offset(0, isLast ? -15 : -25),
-                    child: ReorderableListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: items.length,
-                      buildDefaultDragHandles: false,
-                      onReorder: (oldIndex, newIndex) {
-                        if (onReorder != null) {
-                          onReorder!(oldIndex, newIndex);
-                        }
-                      },
-                      proxyDecorator: (Widget child, int index, Animation<double> animation) {
-                        return Material(
-                          elevation: 0,
-                          color: Colors.transparent,
-                          child: child,
-                        );
-                      },
-                      itemBuilder: (context, index) {
-                        final task = items[index];
-                        return ReorderableDragStartListener(
-                          key: Key(task['id']),
-                          index: index,
-                          child: ColorFilterTaskItem(
-                            text: task['text'] ?? '',
-                            isLastTask: index == items.length - 1,
-                            dueDate: task['dueDate'],
-                            taskId: task['id'] ?? '',
-                            sectionId: sectionId,
-                            taskItemColor:textColor,
-                            sectionName: title,
-                            onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
-                            onEdit: () {
-                              final dueDate = task['dueDate'] != null
-                                  ? DateTime.parse(task['dueDate'])
-                                  : DateTime.now();
-                              onEditTask(
-                                sectionId,
-                                task['id'] ?? '',
-                                task['text'] ?? '',
-                                dueDate,
-                              );
-                            },
-                            onToggleComplete: (isCompleted) {
-                              onToggleComplete(task['id'], isCompleted);
-                            },
-                            completed: task['completed'] ?? false,
-                            isEditing: isEditing,
-                            isDraggable: true,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                if (showItems && !isEditing)
+                if (showItems)
                   Transform.translate(
                     offset: Offset(0, isLast ? -15 : -25),
                     child: Column(
                       children: items.asMap().entries.map((entry) {
                         final index = entry.key;
                         final task = entry.value;
-                        return Draggable<Map<String, String>>(
-                          data: {
-                            'fromSectionId': sectionId,
-                            'taskId': task['id'] ?? '',
+                        return DragTarget<Map<String, String>>(
+                          onWillAccept: (data) => data != null && data['taskId'] != task['id'],
+                          onAccept: (data) {
+                            if (data != null && data['fromSectionId'] != null && data['taskId'] != null) {
+                              if (data['fromSectionId'] == sectionId) {
+                                // Intra-section reorder: move to this index
+                                if (onReorder != null) {
+                                  final oldIndex = items.indexWhere((t) => t['id'] == data['taskId']);
+                                  if (oldIndex != -1) {
+                                    onReorder!(oldIndex, index);
+                                  }
+                                }
+                              } else {
+                                // Inter-section move
+                                if (onMoveTask != null) {
+                                  onMoveTask!(data['fromSectionId']!, sectionId, data['taskId']!);
+                                }
+                              }
+                            }
                           },
-                          feedback: Material(
-                            elevation: 6,
-                            color: Colors.transparent,
-                            child: Container(
-                              width: MediaQuery.of(context).size.width - 32,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(8),
+                          builder: (context, candidateData, rejectedData) {
+                            return Draggable<Map<String, String>>(
+                              data: {
+                                'fromSectionId': sectionId,
+                                'taskId': task['id'] ?? '',
+                              },
+                              feedback: Material(
+                                elevation: 6,
+                                color: Colors.transparent,
+                                child: Container(
+                                  width: MediaQuery.of(context).size.width - 32,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: ColorFilterTaskItem(
+                                    text: task['text'] ?? '',
+                                    isLastTask: index == items.length - 1,
+                                    dueDate: task['dueDate'],
+                                    taskId: task['id'] ?? '',
+                                    sectionId: sectionId,
+                                    taskItemColor: textColor,
+                                    sectionName: title,
+                                    onDelete: () {},
+                                    onEdit: () {},
+                                    onToggleComplete: (_) {},
+                                    completed: task['completed'] ?? false,
+                                    isEditing: false,
+                                  ),
+                                ),
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity: 0.5,
+                                child: ColorFilterTaskItem(
+                                  text: task['text'] ?? '',
+                                  isLastTask: index == items.length - 1,
+                                  dueDate: task['dueDate'],
+                                  taskId: task['id'] ?? '',
+                                  sectionId: sectionId,
+                                  taskItemColor: textColor,
+                                  sectionName: title,
+                                  onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
+                                  onEdit: () {
+                                    final dueDate = task['dueDate'] != null
+                                        ? DateTime.parse(task['dueDate'])
+                                        : DateTime.now();
+                                    onEditTask(
+                                      sectionId,
+                                      task['id'] ?? '',
+                                      task['text'] ?? '',
+                                      dueDate,
+                                    );
+                                  },
+                                  onToggleComplete: (isCompleted) {
+                                    onToggleComplete(task['id'], isCompleted);
+                                  },
+                                  completed: task['completed'] ?? false,
+                                  isEditing: isEditing,
+                                ),
                               ),
                               child: ColorFilterTaskItem(
+                                key: Key(task['id']),
                                 text: task['text'] ?? '',
                                 isLastTask: index == items.length - 1,
                                 dueDate: task['dueDate'],
@@ -1084,70 +1249,26 @@ class ColorFilterGroup extends StatelessWidget {
                                 sectionId: sectionId,
                                 taskItemColor: textColor,
                                 sectionName: title,
-                                onDelete: () {}, // No delete during drag
-                                onEdit: () {}, // No edit during drag
-                                onToggleComplete: (_) {}, // No toggle during drag
+                                onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
+                                onEdit: () {
+                                  final dueDate = task['dueDate'] != null
+                                      ? DateTime.parse(task['dueDate'])
+                                      : DateTime.now();
+                                  onEditTask(
+                                    sectionId,
+                                    task['id'] ?? '',
+                                    task['text'] ?? '',
+                                    dueDate,
+                                  );
+                                },
+                                onToggleComplete: (isCompleted) {
+                                  onToggleComplete(task['id'], isCompleted);
+                                },
                                 completed: task['completed'] ?? false,
-                                isEditing: false,
+                                isEditing: isEditing,
                               ),
-                            ),
-                          ),
-                          childWhenDragging: Opacity(
-                            opacity: 0.5,
-                            child: ColorFilterTaskItem(
-                              text: task['text'] ?? '',
-                              isLastTask: index == items.length - 1,
-                              dueDate: task['dueDate'],
-                              taskId: task['id'] ?? '',
-                              sectionId: sectionId,
-                              taskItemColor: textColor,
-                              sectionName: title,
-                              onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
-                              onEdit: () {
-                                final dueDate = task['dueDate'] != null
-                                    ? DateTime.parse(task['dueDate'])
-                                    : DateTime.now();
-                                onEditTask(
-                                  sectionId,
-                                  task['id'] ?? '',
-                                  task['text'] ?? '',
-                                  dueDate,
-                                );
-                              },
-                              onToggleComplete: (isCompleted) {
-                                onToggleComplete(task['id'], isCompleted);
-                              },
-                              completed: task['completed'] ?? false,
-                              isEditing: isEditing,
-                            ),
-                          ),
-                          child: ColorFilterTaskItem(
-                            key: Key(task['id']),
-                            text: task['text'] ?? '',
-                            isLastTask: index == items.length - 1,
-                            dueDate: task['dueDate'],
-                            taskId: task['id'] ?? '',
-                            sectionId: sectionId,
-                            taskItemColor: textColor,
-                            sectionName: title,
-                            onDelete: () => onDeleteTask(sectionId, task['id'] ?? ''),
-                            onEdit: () {
-                              final dueDate = task['dueDate'] != null
-                                  ? DateTime.parse(task['dueDate'])
-                                  : DateTime.now();
-                              onEditTask(
-                                sectionId,
-                                task['id'] ?? '',
-                                task['text'] ?? '',
-                                dueDate,
-                              );
-                            },
-                            onToggleComplete: (isCompleted) {
-                              onToggleComplete(task['id'], isCompleted);
-                            },
-                            completed: task['completed'] ?? false,
-                            isEditing: isEditing,
-                          ),
+                            );
+                          },
                         );
                       }).toList(),
                     ),
@@ -1363,16 +1484,13 @@ class ColorFilterTaskItem extends StatelessWidget {
                         },
                       )
                     else
-                      IgnorePointer(
-                        child: Opacity(
-                          opacity: 1,
-                          child: CustomCheckbox(
-                            isChecked: true,
-                            isDateGroup: false,
-                            checkBoxColor:taskItemColor!,
-                            onTap: () {},
-                          ),
-                        ),
+                      CustomCheckbox(
+                        isChecked: true,
+                        isDateGroup: false,
+                        checkBoxColor: taskItemColor!,
+                        onTap: () {
+                          onToggleComplete(false);
+                        },
                       ),
                     
                     SizedBox(width: isEditing ? 2 : 12),
