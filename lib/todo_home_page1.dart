@@ -521,7 +521,69 @@ class _TodoHomePageState extends State<TodoHomePage> {
     }
   }
 
-  void _toggleTaskCompletion(String sectionId, String taskId, bool isCompleted) {
+  // void _toggleTaskCompletion(String sectionId, String taskId, bool isCompleted) {
+  //   final sections = getAllSections();
+  //   final currentSectionIndex = sections.indexWhere((s) => s.id == sectionId);
+
+  //   if (currentSectionIndex != -1) {
+  //     final taskIndex = sections[currentSectionIndex].tasks.indexWhere(
+  //       (task) => task['id'] == taskId,
+  //     );
+
+  //     if (taskIndex != -1) {
+  //       final taskToMove = Map<String, dynamic>.from(sections[currentSectionIndex].tasks[taskIndex]);
+
+  //       setState(() {
+  //         taskToMove['completed'] = isCompleted;
+
+  //         if (isCompleted) {
+  //           // Move to Completed section
+  //           sections[currentSectionIndex].tasks.removeAt(taskIndex);
+  //           taskToMove['originalSectionId'] = sectionId;
+  //           final completedSection = _getOrCreateCompletedSection(sections);
+  //           if (!completedSection.tasks.any((task) => task['id'] == taskToMove['id'])) {
+  //             completedSection.tasks.insert(0, taskToMove);
+  //           }
+  //           _collapseAllExcept(completedSection.id);
+  //         } else {
+  //           // Move back to original section if available
+  //           final completedSectionIndex = sections.indexWhere((s) => s.name == 'Completed');
+  //           if (completedSectionIndex != -1) {
+  //             final completedTaskIndex = sections[completedSectionIndex].tasks.indexWhere(
+  //               (task) => task['id'] == taskId,
+  //             );
+  //             if (completedTaskIndex != -1) {
+  //               final originalSectionId = sections[completedSectionIndex].tasks[completedTaskIndex]['originalSectionId'];
+  //               if (originalSectionId != null) {
+  //                 // Remove from completed
+  //                 final task = Map<String, dynamic>.from(sections[completedSectionIndex].tasks.removeAt(completedTaskIndex));
+  //                 task['completed'] = false;
+  //                 task.remove('originalSectionId');
+  //                 final originalSectionIndex = sections.indexWhere((s) => s.id == originalSectionId);
+  //                 if (originalSectionIndex != -1) {
+  //                   sections[originalSectionIndex].tasks.add(task);
+  //                   _collapseAllExcept(originalSectionId);
+  //                 } else {
+  //                   // If original section not found, add back to current section
+  //                   sections[currentSectionIndex].tasks.add(task);
+  //                   _collapseAllExcept(sectionId);
+  //                 }
+  //               } else {
+  //                 // If no originalSectionId, just uncheck in place
+  //                 sections[completedSectionIndex].tasks[completedTaskIndex]['completed'] = isCompleted;
+  //               }
+  //             }
+  //           } else {
+  //             sections[currentSectionIndex].tasks[taskIndex]['completed'] = isCompleted;
+  //           }
+  //         }
+  //         sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+  //       });
+  //     }
+  //   }
+  // }
+
+   void _toggleTaskCompletion(String sectionId, String taskId, bool isCompleted) {
     final sections = getAllSections();
     final currentSectionIndex = sections.indexWhere((s) => s.id == sectionId);
 
@@ -537,47 +599,28 @@ class _TodoHomePageState extends State<TodoHomePage> {
           taskToMove['completed'] = isCompleted;
 
           if (isCompleted) {
-            // Move to Completed section
             sections[currentSectionIndex].tasks.removeAt(taskIndex);
-            taskToMove['originalSectionId'] = sectionId;
             final completedSection = _getOrCreateCompletedSection(sections);
             if (!completedSection.tasks.any((task) => task['id'] == taskToMove['id'])) {
               completedSection.tasks.insert(0, taskToMove);
             }
             _collapseAllExcept(completedSection.id);
+
           } else {
-            // Move back to original section if available
             final completedSectionIndex = sections.indexWhere((s) => s.name == 'Completed');
             if (completedSectionIndex != -1) {
               final completedTaskIndex = sections[completedSectionIndex].tasks.indexWhere(
                 (task) => task['id'] == taskId,
               );
               if (completedTaskIndex != -1) {
-                final originalSectionId = sections[completedSectionIndex].tasks[completedTaskIndex]['originalSectionId'];
-                if (originalSectionId != null) {
-                  // Remove from completed
-                  final task = Map<String, dynamic>.from(sections[completedSectionIndex].tasks.removeAt(completedTaskIndex));
-                  task['completed'] = false;
-                  task.remove('originalSectionId');
-                  final originalSectionIndex = sections.indexWhere((s) => s.id == originalSectionId);
-                  if (originalSectionIndex != -1) {
-                    sections[originalSectionIndex].tasks.add(task);
-                    _collapseAllExcept(originalSectionId);
-                  } else {
-                    // If original section not found, add back to current section
-                    sections[currentSectionIndex].tasks.add(task);
-                    _collapseAllExcept(sectionId);
-                  }
-                } else {
-                  // If no originalSectionId, just uncheck in place
-                  sections[completedSectionIndex].tasks[completedTaskIndex]['completed'] = isCompleted;
-                }
+                sections[completedSectionIndex].tasks[completedTaskIndex]['completed'] = isCompleted;
               }
             } else {
               sections[currentSectionIndex].tasks[taskIndex]['completed'] = isCompleted;
             }
           }
           sectionBox.put('list', sections.map((s) => s.toMap()).toList());
+          //_collapseAllExcept(completedSection);
         });
       }
     }
@@ -1484,13 +1527,16 @@ class ColorFilterTaskItem extends StatelessWidget {
                         },
                       )
                     else
-                      CustomCheckbox(
-                        isChecked: true,
-                        isDateGroup: false,
-                        checkBoxColor: taskItemColor!,
-                        onTap: () {
-                          onToggleComplete(false);
-                        },
+                       IgnorePointer(
+                        child: Opacity(
+                          opacity: 1,
+                          child: CustomCheckbox(
+                            isChecked: true,
+                            isDateGroup: false,
+                            checkBoxColor:taskItemColor!,
+                            onTap: () {},
+                          ),
+                        ),
                       ),
                     
                     SizedBox(width: isEditing ? 2 : 12),
@@ -1925,7 +1971,7 @@ class CustomCheckbox extends StatelessWidget {
         decoration: BoxDecoration(
           color: isChecked 
               ?  Colors.transparent
-              : (isDateGroup || isBlack ? Colors.grey[400] : Colors.white),
+              : (isDateGroup ? Colors.grey[400] : Colors.white),
           border: Border.all(
             color: borderColor,
             width: 1.6,
